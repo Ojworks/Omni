@@ -148,8 +148,8 @@ export function EditorToolbar({
                   {FILTERS.map(filter => (
                     <button
                       key={filter.id}
-                      onClick={() => onEditChange({ filter: filter.css })}
-                      className={`flex flex-col items-center justify-center min-w-[72px] h-[64px] rounded-xl border-2 px-2 transition-all duration-300 ${edits.filter === filter.css ? 'border-accent bg-accent/10 text-accent shadow-md' : 'border-border bg-surface/50 text-muted hover:border-fg hover:text-fg'}`}
+                      onClick={() => onEditChange({ filter: filter.id })}
+                      className={`flex flex-col items-center justify-center min-w-[72px] h-[64px] rounded-xl border-2 px-2 transition-all duration-300 ${edits.filter === filter.id ? 'border-accent bg-accent/10 text-accent shadow-md' : 'border-border bg-surface/50 text-muted hover:border-fg hover:text-fg'}`}
                     >
                       <span className="text-[9px] font-black uppercase tracking-wider text-center leading-tight">{filter.label}</span>
                     </button>
@@ -654,8 +654,8 @@ export function EditorToolbar({
              {FILTERS.map(filter => (
                 <button
                    key={filter.id}
-                   onClick={() => onEditChange({ filter: filter.css })}
-                   className={`rounded-lg border px-3 py-2 text-left text-[10px] font-bold uppercase tracking-wider transition-colors ${edits.filter === filter.css ? 'border-accent bg-accent text-accent-fg' : 'border-border bg-surface hover:border-fg text-muted hover:text-fg'}`}
+                   onClick={() => onEditChange({ filter: filter.id })}
+                   className={`rounded-lg border px-3 py-2 text-left text-[10px] font-bold uppercase tracking-wider transition-colors ${edits.filter === filter.id ? 'border-accent bg-accent text-accent-fg' : 'border-border bg-surface hover:border-fg text-muted hover:text-fg'}`}
                 >
                    {filter.label}
                 </button>
