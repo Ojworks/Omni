@@ -1,6 +1,6 @@
 import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { type Crop } from 'react-image-crop';
-import { WorkspaceFile } from '@/src/types';
+import { WorkspaceFile, FILTERS } from '@/src/types';
 import { motion } from 'motion/react';
 import { ProcessingOverlay } from './ProcessingOverlay';
 
@@ -342,9 +342,8 @@ export function StudioCanvas({ file, isCropActive, cropAspect, onCropChange, onC
   const [imageLoaded, setImageLoaded] = useState(false);
   const [naturalSize, setNaturalSize] = useState<{ w: number; h: number } | null>(null);
 
-  const filters = [
-    file.edits.filter !== 'none' ? file.edits.filter : '',
-  ].filter(Boolean).join(' ');
+  const filterDef = FILTERS.find(f => f.id === file.edits.filter);
+  const filters = filterDef && filterDef.css !== 'none' ? filterDef.css : '';
 
   // Measure the inner container
   useEffect(() => {

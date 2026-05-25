@@ -1,5 +1,5 @@
 import { useState, useRef, Dispatch, SetStateAction, useEffect } from 'react';
-import { WorkspaceFile, ImageEdits, FileFormat, defaultEdits } from '@/src/types';
+import { WorkspaceFile, ImageEdits, FileFormat, defaultEdits, FILTERS } from '@/src/types';
 import { EditorToolbar } from './EditorToolbar';
 import { StudioCanvas } from './StudioCanvas';
 import { BatchSidebar } from './BatchSidebar';
@@ -288,9 +288,10 @@ export function EditorWorkspace({ files, setFiles, onClose, onAddFiles }: Editor
         outCanvas.height = targetHeight;
         const outCtx = outCanvas.getContext('2d')!;
 
-        let filterStr = '';
-        if (file.edits.filter !== 'none') filterStr += file.edits.filter;
-        outCtx.filter = filterStr.trim();
+        // Look up the CSS filter value from FILTERS array
+        const filterDef = FILTERS.find(f => f.id === file.edits.filter);
+        const filterStr = filterDef && filterDef.css !== 'none' ? filterDef.css : '';
+        outCtx.filter = filterStr;
 
         outCtx.drawImage(
           rotCanvas,
