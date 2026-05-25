@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <style>
+    .bg { fill: #1A1A1A; }
+    .accent { fill: #FAF9F6; }
+    @media (prefers-color-scheme: dark) {
+      .bg { fill: #FAF9F6; }
+      .accent { fill: #1A1A1A; }
+    }
+  </style>
+  <!-- File Shape -->
+  <path class="bg" d="M128 48h208l96 96v320c0 26.5-21.5 48-48 48H128c-26.5 0-48-21.5-48-48V96c0-26.5 21.5-48 48-48z" />
+  <!-- Dog-ear fold -->
+  <path opacity="0.5" class="accent" d="M336 48v96h96" />
+  <!-- Inner symbol (Bold 'O' / Aperture) -->
+  <circle cx="256" cy="312" r="72" stroke-width="40" class="accent" fill="none" />
+</svg>
