@@ -161,7 +161,7 @@ export function StudioCanvas({ file, isCropActive, cropAspect, onCropChange, onC
   // (via processImage which bakes rotation into the intermediate canvas).
 
   return (
-    <div ref={containerRef} className={`flex-1 flex items-center justify-center p-3 md:p-12 relative bg-bg ${isCropActive ? 'overflow-visible' : 'overflow-hidden'} ${className}`}>
+    <div ref={containerRef} className={`flex-1 flex items-center justify-center p-3 md:p-12 relative bg-bg ${isCropActive ? 'overflow-visible' : 'overflow-hidden'} ${className}`} style={isCropActive ? { overscrollBehavior: 'none' } : undefined}>
       {/* No SVG filters needed anymore */}
 
       {/* Live Mini Preview (Desktop only, shown during crop) */}
@@ -203,7 +203,7 @@ export function StudioCanvas({ file, isCropActive, cropAspect, onCropChange, onC
             /* ── Crop mode: image reverts to original orientation so the crop
                  overlay's percentage coordinates map directly to the image.
                  Rotation is re-applied after committing the crop. ── */
-            <div className="relative" style={{ display: 'inline-flex', lineHeight: 0, touchAction: 'none', isolation: 'isolate' }}>
+            <div className="relative" style={{ display: 'inline-flex', lineHeight: 0, touchAction: 'none', isolation: 'isolate', overscrollBehavior: 'none' }}>
               <motion.img
                 ref={imgRef}
                 src={file.originalUrl}

@@ -98,6 +98,7 @@ export function MobileToolScreen({
   };
 
   const handleCancel = () => {
+    if (isProcessingMagic) return;
     if (isCropActive) {
       onCancelCrop();
       onClose();
@@ -107,6 +108,7 @@ export function MobileToolScreen({
   };
 
   const handleDone = async () => {
+    if (isProcessingMagic) return;
     if (isCropActive) {
       onConfirmCrop();
       onClose();
@@ -126,12 +128,14 @@ export function MobileToolScreen({
       exit={{ y: '100%' }}
       transition={{ type: 'spring', damping: 30, stiffness: 300 }}
       className="fixed inset-0 z-50 bg-bg flex flex-col"
+      style={{ overscrollBehavior: 'none' }}
     >
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 bg-surface border-b border-border shrink-0">
         <button
           onClick={handleCancel}
-          className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-muted hover:text-fg hover:bg-surface-hover transition-colors active:scale-95"
+          disabled={isProcessingMagic}
+          className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-muted hover:text-fg hover:bg-surface-hover disabled:opacity-30 disabled:pointer-events-none transition-colors active:scale-95"
         >
           <ArrowLeft className="h-4 w-4" />
           <span className="text-xs font-black uppercase tracking-wide">Cancel</span>
@@ -143,14 +147,14 @@ export function MobileToolScreen({
 
         <button
           onClick={handleDone}
-          disabled={isExporting}
+          disabled={isExporting || isProcessingMagic}
           className="flex items-center gap-1.5 px-4 py-2 bg-accent hover:opacity-90 disabled:opacity-50 text-accent-fg rounded-xl transition-colors active:scale-95 text-xs font-black uppercase tracking-wide"
         >
-          {isExporting
+          {isExporting || isProcessingMagic
             ? <div className="h-3.5 w-3.5 border-2 border-accent-fg/30 border-t-accent-fg rounded-full animate-spin" />
             : <Check className="h-3.5 w-3.5" />
           }
-          {isExporting ? 'Saving…' : 'Done'}
+          {isExporting ? 'Saving…' : isProcessingMagic ? 'Processing…' : 'Done'}
         </button>
       </div>
 
