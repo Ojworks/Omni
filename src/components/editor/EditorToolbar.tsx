@@ -105,14 +105,14 @@ export function EditorToolbar({
                     key={filter.id}
                     onClick={() => onEditChange({ filter: filter.id })}
                     className={`flex flex-col items-center gap-1.5 px-3 py-2.5 rounded-2xl border-2 min-w-[72px] transition-all active:scale-95 ${
-                      active ? 'border-blue-500 bg-blue-500/15' : 'border-white/15 bg-white/5'
+                      active ? 'border-accent bg-accent/10' : 'border-border bg-surface'
                     }`}
                   >
                     <span
-                      className="w-9 h-9 rounded-xl border border-white/10"
+                      className="w-9 h-9 rounded-xl border border-border/50"
                       style={{ background: 'linear-gradient(135deg,#777 0%,#ccc 50%,#444 100%)', filter: filter.css === 'none' ? 'none' : filter.css }}
                     />
-                    <span className={`text-[9px] font-bold uppercase tracking-wide leading-tight text-center ${active ? 'text-blue-400' : 'text-white/70'}`}>
+                    <span className={`text-[9px] font-bold uppercase tracking-wide leading-tight text-center ${active ? 'text-accent' : 'text-muted'}`}>
                       {filter.label}
                     </span>
                   </button>
@@ -127,14 +127,14 @@ export function EditorToolbar({
           <div className="px-4 py-3 space-y-3">
             {isCropActive ? (
               <>
-                <p className="text-[9px] uppercase tracking-widest font-bold text-white/40">Aspect Ratio</p>
+                <p className="text-[9px] uppercase tracking-widest font-bold text-muted">Aspect Ratio</p>
                 <div className="grid grid-cols-4 gap-2">
                   {CROP_RATIOS.map(opt => (
                     <button
                       key={opt.label}
                       onClick={() => setCropAspect(opt.val)}
                       className={`py-2.5 rounded-xl border-2 text-xs font-bold transition-all active:scale-95 ${
-                        cropAspect === opt.val ? 'border-blue-500 bg-blue-500/20 text-blue-400' : 'border-white/15 bg-white/5 text-white/70'
+                        cropAspect === opt.val ? 'border-accent bg-accent/10 text-accent' : 'border-border bg-surface text-muted'
                       }`}
                     >
                       {opt.label}
@@ -148,9 +148,9 @@ export function EditorToolbar({
                   <button
                     key={a.label}
                     onClick={a.onClick}
-                    className="flex flex-col items-center justify-center gap-2 py-3.5 rounded-2xl border border-white/15 bg-white/5 text-white/70 active:scale-95 active:bg-white/10 transition-all"
+                    className="flex flex-col items-center justify-center gap-2 py-3.5 rounded-2xl border border-border bg-surface text-muted active:scale-95 active:bg-surface-hover transition-all"
                   >
-                    <span className="text-white/80">{a.icon}</span>
+                    <span className="text-fg/80">{a.icon}</span>
                     <span className="text-[9px] font-bold uppercase tracking-wide">{a.label}</span>
                   </button>
                 ))}
@@ -170,8 +170,8 @@ export function EditorToolbar({
         {activeCategory === 'batch' && (
           <div className="px-4 py-3 space-y-3">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-white/80">Project Files</span>
-              <span className="text-[10px] font-bold text-blue-400 bg-blue-500/15 px-2.5 py-1 rounded-full border border-blue-500/30">
+              <span className="text-xs font-bold text-fg/80">Project Files</span>
+              <span className="text-[10px] font-bold text-accent bg-accent/10 px-2.5 py-1 rounded-full border border-accent/30">
                 {files.length} {files.length === 1 ? 'image' : 'images'}
               </span>
             </div>
@@ -181,7 +181,7 @@ export function EditorToolbar({
                   <button
                     onClick={() => setActiveFileId?.(f.id)}
                     className={`w-16 h-16 rounded-xl border-2 overflow-hidden transition-all active:scale-95 ${
-                      f.id === file.id ? 'border-blue-500 shadow-lg shadow-blue-500/20' : 'border-white/20 opacity-60 hover:opacity-100'
+                      f.id === file.id ? 'border-accent shadow-lg shadow-accent/20' : 'border-border opacity-60 hover:opacity-100'
                     }`}
                   >
                     <img src={f.originalUrl} alt={f.file.name} className="w-full h-full object-cover" />
@@ -189,7 +189,7 @@ export function EditorToolbar({
                   {files.length > 1 && (
                     <button
                       onClick={(e) => { e.stopPropagation(); removeFile?.(f.id); }}
-                      className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1.5 z-10 active:scale-90 shadow-lg shadow-black/50 border-2 border-black"
+                      className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1.5 z-10 active:scale-90 shadow-lg shadow-accent/50 border-2 border-bg"
                     >
                       <X className="h-3 w-3" />
                     </button>
@@ -198,7 +198,7 @@ export function EditorToolbar({
               ))}
               <button
                 onClick={() => fileInputRef.current?.click()}
-                className="w-16 h-16 shrink-0 rounded-xl border-2 border-dashed border-white/25 bg-white/5 flex flex-col items-center justify-center gap-1 text-white/50 active:scale-95 transition-all"
+                className="w-16 h-16 shrink-0 rounded-xl border-2 border-dashed border-border bg-surface flex flex-col items-center justify-center gap-1 text-muted active:scale-95 transition-all"
               >
                 <Plus className="h-5 w-5" />
                 <span className="text-[9px] font-bold">Add</span>
@@ -209,7 +209,7 @@ export function EditorToolbar({
               <div className="flex gap-2">
                 <button
                   onClick={() => onApplyEditsToAll(edits)}
-                  className="flex-1 py-2.5 rounded-xl border border-white/15 bg-white/5 text-[10px] font-black uppercase tracking-wide text-white/60 active:bg-white/10 transition-colors"
+                  className="flex-1 py-2.5 rounded-xl border border-border bg-surface text-[10px] font-black uppercase tracking-wide text-muted active:bg-surface-hover transition-colors"
                 >
                   Apply to All
                 </button>
@@ -240,7 +240,7 @@ export function EditorToolbar({
                   key={value}
                   onClick={() => onFormatChange?.(value)}
                   className={`flex-1 py-2.5 rounded-xl border-2 text-xs font-bold transition-all active:scale-95 ${
-                    selectedFormat === value ? 'border-blue-500 bg-blue-500/20 text-blue-400' : 'border-white/15 bg-white/5 text-white/70'
+                    selectedFormat === value ? 'border-accent bg-accent/10 text-accent' : 'border-border bg-surface text-muted'
                   }`}
                 >
                   {label}
@@ -250,14 +250,14 @@ export function EditorToolbar({
             {selectedFormat !== 'application/pdf' && (
               <button
                 onClick={() => onQualityOpen?.()}
-                className="w-full flex items-center justify-between px-4 py-3 rounded-xl border border-white/15 bg-white/5 active:bg-white/10 transition-colors"
+                className="w-full flex items-center justify-between px-4 py-3 rounded-xl border border-border bg-surface active:bg-surface-hover transition-colors"
               >
-                <span className="text-[10px] font-black uppercase tracking-widest text-white/50">Quality</span>
+                <span className="text-[10px] font-black uppercase tracking-widest text-muted">Quality</span>
                 <div className="flex items-center gap-2">
-                  <span className="text-xs font-bold text-white/80">
+                  <span className="text-xs font-bold text-fg/80">
                     {QUALITY_OPTIONS.find(q => q.value === exportQuality)?.label ?? `${exportQuality}%`}
                   </span>
-                  <ChevronUp className="h-3.5 w-3.5 text-white/40" />
+                  <ChevronUp className="h-3.5 w-3.5 text-muted" />
                 </div>
               </button>
             )}
@@ -354,7 +354,7 @@ export function EditorToolbar({
                   <button onClick={onCancelCrop} className="flex-1 py-2 rounded-lg border border-border text-xs font-semibold text-muted hover:text-fg transition-colors">
                     Cancel
                   </button>
-                  <button onClick={onConfirmCrop} className="flex-1 py-2 rounded-lg bg-accent text-white text-xs font-semibold hover:opacity-90 transition-opacity">
+                  <button onClick={onConfirmCrop} className="flex-1 py-2 rounded-lg bg-accent text-accent-fg text-xs font-semibold hover:opacity-90 transition-opacity">
                     Apply Crop
                   </button>
                 </div>
@@ -476,9 +476,9 @@ function ResizePanel({ file, edits, onEditChange, mobile }: {
   const toggleLock = () => onEditChange({ resize: { width: w, height: h, lockAspect: !locked } });
 
   const inputCls = mobile
-    ? 'w-full px-3 py-2 bg-white/10 border border-white/20 rounded-lg text-white text-sm focus:border-blue-500 focus:outline-none'
+    ? 'w-full px-3 py-2 bg-surface border border-border rounded-lg text-fg text-sm focus:border-accent focus:outline-none'
     : 'w-full px-2 py-1.5 bg-surface-2 border border-border rounded-lg text-sm text-fg focus:border-accent focus:outline-none';
-  const labelCls = mobile ? 'block text-xs font-medium text-white/80 mb-2' : 'block text-xs text-muted mb-1';
+  const labelCls = mobile ? 'block text-xs font-medium text-fg/80 mb-2' : 'block text-xs text-muted mb-1';
 
   return (
     <div className="space-y-3">
@@ -499,8 +499,8 @@ function ResizePanel({ file, edits, onEditChange, mobile }: {
         onClick={toggleLock}
         className={`w-full flex items-center justify-center gap-2 py-2 rounded-lg border text-xs font-semibold transition-colors ${
           locked
-            ? mobile ? 'border-blue-500 bg-blue-500/20 text-blue-400' : 'border-accent bg-accent/10 text-accent'
-            : mobile ? 'border-white/20 bg-white/5 text-white/80' : 'border-border bg-surface-2 text-muted hover:text-fg'
+            ? mobile ? 'border-accent bg-accent/10 text-accent' : 'border-accent bg-accent/10 text-accent'
+            : mobile ? 'border-border bg-surface text-fg/80' : 'border-border bg-surface-2 text-muted hover:text-fg'
         }`}
       >
         {locked ? <Lock className="h-3.5 w-3.5" /> : <Unlock className="h-3.5 w-3.5" />}
@@ -521,7 +521,7 @@ function MagicPanel({ file, onRemoveBackground, isProcessingMagic, magicError, m
   const error = !!magicError;
 
   const btnCls = mobile
-    ? `w-full flex items-center justify-center gap-3 py-4 rounded-xl border-2 transition-all duration-300 active:scale-95 disabled:opacity-50 ${error ? 'border-red-500 bg-red-500/20 text-red-400' : done ? 'border-green-500 bg-green-500/20 text-green-400' : 'border-white/20 bg-white/5 text-white/80 hover:border-white/40'}`
+    ? `w-full flex items-center justify-center gap-3 py-4 rounded-xl border-2 transition-all duration-300 active:scale-95 disabled:opacity-50 ${error ? 'border-red-500 bg-red-500/20 text-red-400' : done ? 'border-green-500 bg-green-500/20 text-green-400' : 'border-border bg-surface text-fg/80 hover:border-fg/40'}`
     : `w-full flex items-center justify-center gap-2 py-3 rounded-lg border text-sm font-semibold transition-colors disabled:opacity-50 ${error ? 'border-red-500/50 bg-red-500/10 text-red-400' : done ? 'border-green-500/50 bg-green-500/10 text-green-400' : 'border-border bg-surface-hover text-fg hover:bg-surface-2'}`;
 
   return (

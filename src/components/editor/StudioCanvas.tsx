@@ -4,324 +4,7 @@ import { WorkspaceFile, FILTERS } from '@/src/types';
 import { motion } from 'motion/react';
 import { ProcessingOverlay } from './ProcessingOverlay';
 import { useIsMobile } from '@/src/lib/hooks';
-
-// ─────────────────────────────────────────────
-// Types
-// ─────────────────────────────────────────────
-type HandleType = 'move' | 'tl' | 'tr' | 'bl' | 'br' | 't' | 'b' | 'l' | 'r';
-
-interface DragState {
-  handle: HandleType;
-  startX: number;
-  startY: number;
-  startCrop: { x: number; y: number; width: number; height: number };
-  overlayW: number;
-  overlayH: number;
-}
-
-interface CustomCropOverlayProps {
-  crop: Crop;
-  aspect?: number;
-  onChange: (crop: Crop) => void;
-  onComplete: (crop: Crop) => void;
-  isMobile?: boolean;
-}
-
-// ─────────────────────────────────────────────
-// Custom Crop Overlay — Lightroom / PS style
-// ─────────────────────────────────────────────
-function CustomCropOverlay({ crop, aspect, onChange, onComplete, isMobile = false }: CustomCropOverlayProps) {
-  const overlayRef = useRef<HTMLDivElement>(null);
-  const dragRef = useRef<DragState | null>(null);
-  const lastCropRef = useRef<Crop>(crop);
-  const [isDragging, setIsDragging] = useState(false);
-
-  lastCropRef.current = crop;
-
-  const cx = crop.x ?? 0;
-  const cy = crop.y ?? 0;
-  const cw = crop.width ?? 100;
-  const ch = crop.height ?? 100;
-
-  // Apply aspect ratio immediately when it changes
-  useEffect(() => {
-    if (!aspect || !overlayRef.current) return;
-    const { width: ow, height: oh } = overlayRef.current.getBoundingClientRect();
-    if (!ow || !oh) return;
-    const pxW = (cw / 100) * ow;
-    const pxH = (ch / 100) * oh;
-    const targetPxH = pxW / aspect;
-    const newH = (targetPxH / oh) * 100;
-    const newY = Math.max(0, Math.min(100 - newH, cy + (ch - newH) / 2));
-    const next: Crop = { unit: '%', x: cx, y: newY, width: cw, height: Math.min(100 - newY, newH) };
-    onChange(next);
-    onComplete(next);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [aspect]);
-
-  const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
-
-  const computeNewCrop = (
-    handle: HandleType,
-    start: DragState['startCrop'],
-    dx: number, dy: number,
-    ow: number, oh: number,
-    asp?: number
-  ): { x: number; y: number; width: number; height: number } => {
-    let { x, y, width, height } = start;
-    const minW = (isMobile ? 40 : 20) / ow * 100;
-    const minH = (isMobile ? 40 : 20) / oh * 100;
-
-    switch (handle) {
-      case 'move':
-        x = clamp(start.x + dx, 0, 100 - width);
-        y = clamp(start.y + dy, 0, 100 - height);
-        break;
-      case 'tl': {
-        const nx = clamp(start.x + dx, 0, start.x + start.width - minW);
-        const ny = clamp(start.y + dy, 0, start.y + start.height - minH);
-        width = start.width - (nx - start.x);
-        height = start.height - (ny - start.y);
-        x = nx; y = ny; break;
-      }
-      case 'tr': {
-        const ny = clamp(start.y + dy, 0, start.y + start.height - minH);
-        height = start.height - (ny - start.y);
-        width = clamp(start.width + dx, minW, 100 - start.x);
-        y = ny; break;
-      }
-      case 'bl': {
-        const nx = clamp(start.x + dx, 0, start.x + start.width - minW);
-        width = start.width - (nx - start.x);
-        height = clamp(start.height + dy, minH, 100 - start.y);
-        x = nx; break;
-      }
-      case 'br':
-        width = clamp(start.width + dx, minW, 100 - start.x);
-        height = clamp(start.height + dy, minH, 100 - start.y);
-        break;
-      case 't': {
-        const ny = clamp(start.y + dy, 0, start.y + start.height - minH);
-        height = start.height - (ny - start.y); y = ny; break;
-      }
-      case 'b':
-        height = clamp(start.height + dy, minH, 100 - start.y); break;
-      case 'l': {
-        const nx = clamp(start.x + dx, 0, start.x + start.width - minW);
-        width = start.width - (nx - start.x); x = nx; break;
-      }
-      case 'r':
-        width = clamp(start.width + dx, minW, 100 - start.x); break;
-    }
-
-    if (asp && handle !== 'move') {
-      if (handle === 't' || handle === 'b') {
-        const newW = clamp((height * oh / 100) * asp / ow * 100, minW, 100);
-        x = clamp(x + (width - newW) / 2, 0, 100 - newW);
-        width = newW;
-      } else if (handle === 'l' || handle === 'r') {
-        const newH = clamp((width * ow / 100) / asp / oh * 100, minH, 100);
-        y = clamp(y + (height - newH) / 2, 0, 100 - newH);
-        height = newH;
-      } else {
-        const newH = (width * ow / 100) / asp / oh * 100;
-        height = clamp(newH, minH, 100);
-        if (handle === 'tl' || handle === 'tr') y = start.y + start.height - height;
-        if (handle === 'tl' || handle === 'bl') x = start.x + start.width - width;
-      }
-      x = clamp(x, 0, 100 - width);
-      y = clamp(y, 0, 100 - height);
-      width = clamp(width, minW, 100 - x);
-      height = clamp(height, minH, 100 - y);
-    }
-
-    return { x, y, width, height };
-  };
-
-  // ── Pointer event wiring ────────────────────────────────────────
-  const startDrag = (handle: HandleType) => (e: React.PointerEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    if (!overlayRef.current) return;
-    const rect = overlayRef.current.getBoundingClientRect();
-    dragRef.current = {
-      handle,
-      startX: e.clientX,
-      startY: e.clientY,
-      startCrop: { x: cx, y: cy, width: cw, height: ch },
-      overlayW: rect.width,
-      overlayH: rect.height,
-    };
-    setIsDragging(true);
-  };
-
-  useEffect(() => {
-    const onMove = (e: PointerEvent) => {
-      if (!dragRef.current) return;
-      const { handle, startX, startY, startCrop, overlayW, overlayH } = dragRef.current;
-      const dx = ((e.clientX - startX) / overlayW) * 100;
-      const dy = ((e.clientY - startY) / overlayH) * 100;
-      const next = computeNewCrop(handle, startCrop, dx, dy, overlayW, overlayH, aspect);
-      const newCrop: Crop = { unit: '%', ...next };
-      lastCropRef.current = newCrop;
-      onChange(newCrop);
-    };
-
-    const onUp = (e: PointerEvent) => {
-      if (!dragRef.current) return;
-      onMove(e);
-      onComplete(lastCropRef.current);
-      dragRef.current = null;
-      setIsDragging(false);
-    };
-
-    window.addEventListener('pointermove', onMove, { passive: false });
-    window.addEventListener('pointerup', onUp);
-    return () => {
-      window.removeEventListener('pointermove', onMove);
-      window.removeEventListener('pointerup', onUp);
-    };
-  // computeNewCrop is stable (no deps), aspect/onChange/onComplete are stable refs from parent
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [aspect, onChange, onComplete]);
-
-  // ── Render ──────────────────────────────────────────────────────
-  // Scrim panels (4 rects covering outside-crop area)
-  const scrimStyle = 'absolute bg-black/55 pointer-events-none transition-none';
-
-  // Corner handle renderer — Lightroom-style L shape
-  const Corner = ({ pos, cursor, handle }: { pos: 'tl'|'tr'|'bl'|'br'; cursor: string; handle: HandleType }) => {
-    const isLeft = pos.endsWith('l');
-    const isTop  = pos.startsWith('t');
-    const hitSize = isMobile ? 56 : 32;
-    const offset  = isMobile ? -10 : -4;
-    const armLen  = isMobile ? 24 : 18;
-    const armThick = isMobile ? 4 : 3;
-    return (
-      <div
-        onPointerDown={startDrag(handle)}
-        className="absolute z-20"
-        style={{
-          cursor,
-          width: hitSize,
-          height: hitSize,
-          [isLeft ? 'left' : 'right']: offset,
-          [isTop  ? 'top'  : 'bottom']: offset,
-          touchAction: 'none',
-          display: 'flex',
-          alignItems: isTop ? 'flex-start' : 'flex-end',
-          justifyContent: isLeft ? 'flex-start' : 'flex-end',
-        }}
-      >
-        {/* horizontal arm */}
-        <div className="absolute bg-white rounded-sm" style={{
-          width: armLen, height: armThick,
-          [isLeft ? 'left' : 'right']: isMobile ? 6 : 0,
-          [isTop  ? 'top'  : 'bottom']: isMobile ? 6 : 0,
-        }} />
-        {/* vertical arm */}
-        <div className="absolute bg-white rounded-sm" style={{
-          width: armThick, height: armLen,
-          [isLeft ? 'left' : 'right']: isMobile ? 6 : 0,
-          [isTop  ? 'top'  : 'bottom']: isMobile ? 6 : 0,
-        }} />
-      </div>
-    );
-  };
-
-  // Edge handle renderer — pill shape
-  const Edge = ({ side, handle }: { side: 't'|'b'|'l'|'r'; handle: HandleType }) => {
-    const isHoriz = side === 't' || side === 'b';
-    const hitThick = isMobile ? 48 : 16;
-    const hitLong  = isMobile ? 64 : 44;
-    const barLong  = isMobile ? 36 : 28;
-    const barThick = isMobile ? 4 : 3;
-    const offset   = -(hitThick / 2);
-    return (
-      <div
-        onPointerDown={startDrag(handle)}
-        className="absolute z-20 flex items-center justify-center"
-        style={{
-          cursor: isHoriz ? 'ns-resize' : 'ew-resize',
-          touchAction: 'none',
-          ...(side === 't' ? { top: offset, left: '50%', transform: 'translateX(-50%)', width: hitLong, height: hitThick } :
-              side === 'b' ? { bottom: offset, left: '50%', transform: 'translateX(-50%)', width: hitLong, height: hitThick } :
-              side === 'l' ? { left: offset, top: '50%', transform: 'translateY(-50%)', width: hitThick, height: hitLong } :
-                             { right: offset, top: '50%', transform: 'translateY(-50%)', width: hitThick, height: hitLong }),
-        }}
-      >
-        <div className="bg-white rounded-full" style={
-          isHoriz ? { width: barLong, height: barThick } : { width: barThick, height: barLong }
-        } />
-      </div>
-    );
-  };
-
-  return (
-    <div
-      ref={overlayRef}
-      className="absolute inset-0"
-      style={{ cursor: isDragging ? 'grabbing' : 'default', touchAction: 'none' }}
-    >
-      {/* ── Scrim panels ── */}
-      {/* Top */}
-      <div className={scrimStyle} style={{ top: 0, left: 0, right: 0, height: `${cy}%` }} />
-      {/* Bottom */}
-      <div className={scrimStyle} style={{ bottom: 0, left: 0, right: 0, height: `${100 - cy - ch}%` }} />
-      {/* Left */}
-      <div className={scrimStyle} style={{ top: `${cy}%`, left: 0, width: `${cx}%`, height: `${ch}%` }} />
-      {/* Right */}
-      <div className={scrimStyle} style={{ top: `${cy}%`, right: 0, width: `${100 - cx - cw}%`, height: `${ch}%` }} />
-
-      {/* ── Crop box ── */}
-      <div
-        className="absolute"
-        style={{
-          left: `${cx}%`, top: `${cy}%`,
-          width: `${cw}%`, height: `${ch}%`,
-          cursor: 'move',
-          touchAction: 'none',
-        }}
-        onPointerDown={startDrag('move')}
-      >
-        {/* Outer border */}
-        <div className="absolute inset-0 border border-white/80 pointer-events-none" />
-
-        {/* Rule-of-thirds grid — fades in while dragging */}
-        <div
-          className="absolute inset-0 pointer-events-none"
-          style={{ opacity: isDragging ? 1 : 0, transition: 'opacity 150ms ease' }}
-        >
-          {/* Vertical lines */}
-          <div className="absolute top-0 bottom-0 border-l border-white/35" style={{ left: '33.33%' }} />
-          <div className="absolute top-0 bottom-0 border-l border-white/35" style={{ left: '66.66%' }} />
-          {/* Horizontal lines */}
-          <div className="absolute left-0 right-0 border-t border-white/35" style={{ top: '33.33%' }} />
-          <div className="absolute left-0 right-0 border-t border-white/35" style={{ top: '66.66%' }} />
-        </div>
-
-        {/* Center crosshair dot (Lightroom style) */}
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none"
-             style={{ width: 10, height: 10 }}>
-          <div className="absolute top-1/2 left-0 right-0 border-t border-white/60" />
-          <div className="absolute left-1/2 top-0 bottom-0 border-l border-white/60" />
-        </div>
-
-        {/* ── Corner handles ── */}
-        <Corner pos="tl" cursor="nw-resize" handle="tl" />
-        <Corner pos="tr" cursor="ne-resize" handle="tr" />
-        <Corner pos="bl" cursor="sw-resize" handle="bl" />
-        <Corner pos="br" cursor="se-resize" handle="br" />
-
-        {/* ── Edge handles ── */}
-        <Edge side="t" handle="t" />
-        <Edge side="b" handle="b" />
-        <Edge side="l" handle="l" />
-        <Edge side="r" handle="r" />
-      </div>
-    </div>
-  );
-}
+import { CropOverlay } from './CropOverlay';
 
 // ─────────────────────────────────────────────
 // StudioCanvas
@@ -472,8 +155,13 @@ export function StudioCanvas({ file, isCropActive, cropAspect, onCropChange, onC
   // Current crop (default to full image if none)
   const activeCrop: Crop = file.edits.crop ?? { unit: '%', x: 0, y: 0, width: 100, height: 100 };
 
+  // When entering crop mode with a rotated image, we display it in its original
+  // (unrotated) orientation so the crop overlay's percentage coordinates map
+  // directly to the image. The rotation is re-applied after cropping is done
+  // (via processImage which bakes rotation into the intermediate canvas).
+
   return (
-    <div ref={containerRef} className={`flex-1 overflow-hidden flex items-center justify-center p-3 md:p-12 relative bg-bg ${className}`}>
+    <div ref={containerRef} className={`flex-1 flex items-center justify-center p-3 md:p-12 relative bg-bg ${isCropActive ? 'overflow-visible' : 'overflow-hidden'} ${className}`}>
       {/* No SVG filters needed anymore */}
 
       {/* Live Mini Preview (Desktop only, shown during crop) */}
@@ -512,27 +200,29 @@ export function StudioCanvas({ file, isCropActive, cropAspect, onCropChange, onC
           style={{ opacity: dimensionsReady && imageLoaded ? 1 : 0 }}
         >
           {isCropActive ? (
-            /* ── Crop mode: image + overlay wrapper ── */
-            <div className="relative" style={{ display: 'inline-flex', lineHeight: 0 }}>
+            /* ── Crop mode: image reverts to original orientation so the crop
+                 overlay's percentage coordinates map directly to the image.
+                 Rotation is re-applied after committing the crop. ── */
+            <div className="relative" style={{ display: 'inline-flex', lineHeight: 0, touchAction: 'none', isolation: 'isolate' }}>
               <motion.img
                 ref={imgRef}
                 src={file.originalUrl}
                 onLoad={onImgLoad}
                 animate={{
-                  rotate: file.edits.rotate,
                   scaleX: file.edits.flipX ? -1 : 1,
                   scaleY: file.edits.flipY ? -1 : 1,
                 }}
                 transition={{ type: "spring", bounce: 0, duration: 0.35 }}
                 style={{
                   filter: filters,
-                  ...constrainedImgStyle()
+                  ...constrainedImgStyle(),
+                  pointerEvents: 'none',
                 }}
                 alt="Cropping"
                 className="shadow-2xl rounded-sm bg-checkerboard"
                 draggable={false}
               />
-              <CustomCropOverlay
+              <CropOverlay
                 crop={activeCrop}
                 aspect={cropAspect}
                 onChange={onCropChange}

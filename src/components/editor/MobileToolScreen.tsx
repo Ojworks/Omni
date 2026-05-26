@@ -45,8 +45,8 @@ interface MobileToolScreenProps {
   isProcessingMagic: boolean;
   magicError: string | null;
   onDismissMagicError: () => void;
-  crop: Crop | undefined;
-  setCrop: (crop: Crop | undefined) => void;
+  onCropLiveUpdate: (crop: Crop) => void;
+  onCancelTool: () => void;
 }
 
 export function MobileToolScreen({
@@ -80,8 +80,8 @@ export function MobileToolScreen({
   isProcessingMagic,
   magicError,
   onDismissMagicError,
-  crop,
-  setCrop
+  onCropLiveUpdate,
+  onCancelTool
 }: MobileToolScreenProps) {
   const [qualityOpen, setQualityOpen] = useState(false);
 
@@ -97,7 +97,21 @@ export function MobileToolScreen({
     }
   };
 
+  const handleCancel = () => {
+    if (isCropActive) {
+      onCancelCrop();
+      onClose();
+    } else {
+      onCancelTool();
+    }
+  };
+
   const handleDone = async () => {
+    if (isCropActive) {
+      onConfirmCrop();
+      onClose();
+      return;
+    }
     if (activeCategory === 'export') {
       await onExport(selectedFormat, false, exportQuality / 100);
     }
@@ -111,29 +125,29 @@ export function MobileToolScreen({
       animate={{ y: 0 }}
       exit={{ y: '100%' }}
       transition={{ type: 'spring', damping: 30, stiffness: 300 }}
-      className="fixed inset-0 z-50 bg-black flex flex-col"
+      className="fixed inset-0 z-50 bg-bg flex flex-col"
     >
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 bg-black border-b border-white/10 shrink-0">
+      <div className="flex items-center justify-between px-4 py-3 bg-surface border-b border-border shrink-0">
         <button
-          onClick={onClose}
-          className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-white/60 hover:text-white hover:bg-white/10 transition-colors active:scale-95"
+          onClick={handleCancel}
+          className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-muted hover:text-fg hover:bg-surface-hover transition-colors active:scale-95"
         >
           <ArrowLeft className="h-4 w-4" />
           <span className="text-xs font-black uppercase tracking-wide">Cancel</span>
         </button>
 
-        <h1 className="text-sm font-black uppercase tracking-widest text-white">
+        <h1 className="text-sm font-black uppercase tracking-widest text-fg">
           {getCategoryTitle()}
         </h1>
 
         <button
           onClick={handleDone}
           disabled={isExporting}
-          className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white rounded-xl transition-colors active:scale-95 text-xs font-black uppercase tracking-wide"
+          className="flex items-center gap-1.5 px-4 py-2 bg-accent hover:opacity-90 disabled:opacity-50 text-accent-fg rounded-xl transition-colors active:scale-95 text-xs font-black uppercase tracking-wide"
         >
           {isExporting
-            ? <div className="h-3.5 w-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+            ? <div className="h-3.5 w-3.5 border-2 border-accent-fg/30 border-t-accent-fg rounded-full animate-spin" />
             : <Check className="h-3.5 w-3.5" />
           }
           {isExporting ? 'Saving…' : 'Done'}
@@ -141,20 +155,20 @@ export function MobileToolScreen({
       </div>
 
       {/* Canvas Area */}
-      <div className="flex-1 bg-[#0a0a0a] flex items-center justify-center overflow-hidden">
+      <div className="flex-1 bg-bg flex items-center justify-center" style={{ touchAction: 'none' }}>
         <StudioCanvas 
           file={activeFile} 
           isCropActive={isCropActive}
           cropAspect={cropAspect}
-          onCropChange={setCrop}
-          onCropComplete={setCrop}
+          onCropChange={onCropLiveUpdate}
+          onCropComplete={onCropLiveUpdate}
           isProcessingMagic={isProcessingMagic}
           className="max-h-full max-w-full"
         />
       </div>
 
       {/* Tool Controls */}
-      <div className="bg-black border-t border-white/10 pb-safe shrink-0">
+      <div className="bg-surface border-t border-border pb-safe shrink-0">
         <EditorToolbar 
           file={activeFile}
           files={files}
@@ -202,7 +216,7 @@ export function MobileToolScreen({
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.2 }}
-            className="fixed inset-0 z-[60] bg-black/60"
+            className="fixed inset-0 z-[60] bg-bg/60"
             onClick={() => setQualityOpen(false)}
           />
           <motion.div
@@ -211,11 +225,11 @@ export function MobileToolScreen({
             animate={{ y: 0 }}
             exit={{ y: '100%' }}
             transition={{ type: 'spring', damping: 30, stiffness: 300 }}
-            className="fixed bottom-0 left-0 right-0 z-[61] bg-[#111] border-t border-white/10 rounded-t-2xl pb-safe"
+            className="fixed bottom-0 left-0 right-0 z-[61] bg-surface border-t border-border rounded-t-2xl pb-safe"
           >
-            <div className="flex items-center justify-between px-5 py-4 border-b border-white/10">
-              <span className="text-xs font-black uppercase tracking-widest text-white/50">Quality</span>
-              <button onClick={() => setQualityOpen(false)} className="p-1 text-white/40 hover:text-white transition-colors">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-border">
+              <span className="text-xs font-black uppercase tracking-widest text-muted">Quality</span>
+              <button onClick={() => setQualityOpen(false)} className="p-1 text-muted hover:text-fg transition-colors">
                 <X className="h-4 w-4" />
               </button>
             </div>
@@ -223,10 +237,10 @@ export function MobileToolScreen({
               <button
                 key={opt.value}
                 onClick={() => { setExportQuality(opt.value); setQualityOpen(false); }}
-                className={`w-full flex items-center justify-between px-5 py-4 active:bg-white/5 transition-colors ${exportQuality === opt.value ? 'text-blue-400' : 'text-white/80'}`}
+                className={`w-full flex items-center justify-between px-5 py-4 active:bg-surface-hover transition-colors ${exportQuality === opt.value ? 'text-accent' : 'text-fg/80'}`}
               >
                 <span className="text-sm font-semibold">{opt.label}</span>
-                {exportQuality === opt.value && <span className="w-2 h-2 rounded-full bg-blue-500" />}
+                {exportQuality === opt.value && <span className="w-2 h-2 rounded-full bg-accent" />}
               </button>
             ))}
           </motion.div>

@@ -51,7 +51,7 @@ export function SplashScreen({ onComplete }: SplashScreenProps) {
           transition={{ duration: 0.6, delay: 0.8 }}
           className="text-[10px] font-bold uppercase tracking-[0.3em] text-muted text-center will-change-transform"
         >
-          LOCAL DOCUMENT STUDIO
+          Professional Document &amp; Image Tools
         </motion.p>
       </motion.div>
     </motion.div>

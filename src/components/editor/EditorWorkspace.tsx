@@ -32,7 +32,6 @@ export function EditorWorkspace({ files, setFiles, onClose, onAddFiles }: Editor
 
   const [isCropActive, setIsCropActive] = useState(false);
   const [cropAspect, setCropAspect] = useState<number | undefined>(undefined);
-  const [crop, setCrop] = useState<Crop | undefined>(undefined);
   const [isExporting, setIsExporting] = useState(false);
   const [selectedFormat, setSelectedFormat] = useState<FileFormat>('image/jpeg');
   const [exportQuality, setExportQuality] = useState(90);
@@ -620,8 +619,8 @@ export function EditorWorkspace({ files, setFiles, onClose, onAddFiles }: Editor
                       magicError={magicError}
                       onDismissMagicError={() => setMagicError(null)}
                       onResetAll={handleResetAll}
-                      crop={crop}
-                      setCrop={setCrop}
+                      onCropLiveUpdate={(c) => updateCropLive(c)}
+                      onCancelTool={handleCancelTool}
                     />
                   )}
                 </AnimatePresence>
