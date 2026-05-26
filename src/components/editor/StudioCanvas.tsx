@@ -1,8 +1,9 @@
-import React, { useRef, useEffect, useState, useCallback } from 'react';
+import React, { useRef, useEffect, useState } from 'react';
 import { type Crop } from 'react-image-crop';
 import { WorkspaceFile, FILTERS } from '@/src/types';
 import { motion } from 'motion/react';
 import { ProcessingOverlay } from './ProcessingOverlay';
+import { useIsMobile } from '@/src/lib/hooks';
 
 // ─────────────────────────────────────────────
 // Types
@@ -23,18 +24,18 @@ interface CustomCropOverlayProps {
   aspect?: number;
   onChange: (crop: Crop) => void;
   onComplete: (crop: Crop) => void;
+  isMobile?: boolean;
 }
 
 // ─────────────────────────────────────────────
 // Custom Crop Overlay — Lightroom / PS style
 // ─────────────────────────────────────────────
-function CustomCropOverlay({ crop, aspect, onChange, onComplete }: CustomCropOverlayProps) {
+function CustomCropOverlay({ crop, aspect, onChange, onComplete, isMobile = false }: CustomCropOverlayProps) {
   const overlayRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<DragState | null>(null);
   const lastCropRef = useRef<Crop>(crop);
   const [isDragging, setIsDragging] = useState(false);
 
-  // Keep lastCropRef current for the pointerup callback
   lastCropRef.current = crop;
 
   const cx = crop.x ?? 0;
@@ -42,110 +43,100 @@ function CustomCropOverlay({ crop, aspect, onChange, onComplete }: CustomCropOve
   const cw = crop.width ?? 100;
   const ch = crop.height ?? 100;
 
-  // ── Core drag computation (pure function) ──────────────────────
-  const computeNewCrop = useCallback((
+  // Apply aspect ratio immediately when it changes
+  useEffect(() => {
+    if (!aspect || !overlayRef.current) return;
+    const { width: ow, height: oh } = overlayRef.current.getBoundingClientRect();
+    if (!ow || !oh) return;
+    const pxW = (cw / 100) * ow;
+    const pxH = (ch / 100) * oh;
+    const targetPxH = pxW / aspect;
+    const newH = (targetPxH / oh) * 100;
+    const newY = Math.max(0, Math.min(100 - newH, cy + (ch - newH) / 2));
+    const next: Crop = { unit: '%', x: cx, y: newY, width: cw, height: Math.min(100 - newY, newH) };
+    onChange(next);
+    onComplete(next);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [aspect]);
+
+  const clamp = (v: number, min: number, max: number) => Math.max(min, Math.min(max, v));
+
+  const computeNewCrop = (
     handle: HandleType,
     start: DragState['startCrop'],
-    dx: number,   // deltas already in % of overlay
-    dy: number,
-    overlayW: number,
-    overlayH: number,
+    dx: number, dy: number,
+    ow: number, oh: number,
     asp?: number
   ): { x: number; y: number; width: number; height: number } => {
     let { x, y, width, height } = start;
-    const minW = (20 / overlayW) * 100;
-    const minH = (20 / overlayH) * 100;
+    const minW = (isMobile ? 40 : 20) / ow * 100;
+    const minH = (isMobile ? 40 : 20) / oh * 100;
 
     switch (handle) {
       case 'move':
-        x = Math.max(0, Math.min(100 - width, start.x + dx));
-        y = Math.max(0, Math.min(100 - height, start.y + dy));
+        x = clamp(start.x + dx, 0, 100 - width);
+        y = clamp(start.y + dy, 0, 100 - height);
         break;
       case 'tl': {
-        const nx = Math.max(0, Math.min(start.x + start.width - minW, start.x + dx));
-        const ny = Math.max(0, Math.min(start.y + start.height - minH, start.y + dy));
+        const nx = clamp(start.x + dx, 0, start.x + start.width - minW);
+        const ny = clamp(start.y + dy, 0, start.y + start.height - minH);
         width = start.width - (nx - start.x);
         height = start.height - (ny - start.y);
-        x = nx; y = ny;
-        break;
+        x = nx; y = ny; break;
       }
       case 'tr': {
-        const ny = Math.max(0, Math.min(start.y + start.height - minH, start.y + dy));
+        const ny = clamp(start.y + dy, 0, start.y + start.height - minH);
         height = start.height - (ny - start.y);
-        width = Math.max(minW, Math.min(100 - start.x, start.width + dx));
-        y = ny;
-        break;
+        width = clamp(start.width + dx, minW, 100 - start.x);
+        y = ny; break;
       }
       case 'bl': {
-        const nx = Math.max(0, Math.min(start.x + start.width - minW, start.x + dx));
+        const nx = clamp(start.x + dx, 0, start.x + start.width - minW);
         width = start.width - (nx - start.x);
-        height = Math.max(minH, Math.min(100 - start.y, start.height + dy));
-        x = nx;
-        break;
+        height = clamp(start.height + dy, minH, 100 - start.y);
+        x = nx; break;
       }
       case 'br':
-        width = Math.max(minW, Math.min(100 - start.x, start.width + dx));
-        height = Math.max(minH, Math.min(100 - start.y, start.height + dy));
+        width = clamp(start.width + dx, minW, 100 - start.x);
+        height = clamp(start.height + dy, minH, 100 - start.y);
         break;
       case 't': {
-        const ny = Math.max(0, Math.min(start.y + start.height - minH, start.y + dy));
-        height = start.height - (ny - start.y);
-        y = ny;
-        break;
+        const ny = clamp(start.y + dy, 0, start.y + start.height - minH);
+        height = start.height - (ny - start.y); y = ny; break;
       }
       case 'b':
-        height = Math.max(minH, Math.min(100 - start.y, start.height + dy));
-        break;
+        height = clamp(start.height + dy, minH, 100 - start.y); break;
       case 'l': {
-        const nx = Math.max(0, Math.min(start.x + start.width - minW, start.x + dx));
-        width = start.width - (nx - start.x);
-        x = nx;
-        break;
+        const nx = clamp(start.x + dx, 0, start.x + start.width - minW);
+        width = start.width - (nx - start.x); x = nx; break;
       }
       case 'r':
-        width = Math.max(minW, Math.min(100 - start.x, start.width + dx));
-        break;
+        width = clamp(start.width + dx, minW, 100 - start.x); break;
     }
 
-    // ── Aspect ratio enforcement ─────────────────────────────────
     if (asp && handle !== 'move') {
-      const pxW = width * overlayW;
-      const pxH = height * overlayH;
-      if (['t', 'b'].includes(handle)) {
-        const newPxW = pxH * asp;
-        const newW = newPxW / overlayW;
-        const diff = newW - width;
-        x = Math.max(0, x - diff / 2);
+      if (handle === 't' || handle === 'b') {
+        const newW = clamp((height * oh / 100) * asp / ow * 100, minW, 100);
+        x = clamp(x + (width - newW) / 2, 0, 100 - newW);
         width = newW;
-      } else if (['l', 'r'].includes(handle)) {
-        const newPxH = pxW / asp;
-        const newH = newPxH / overlayH;
-        const diff = newH - height;
-        y = Math.max(0, y - diff / 2);
+      } else if (handle === 'l' || handle === 'r') {
+        const newH = clamp((width * ow / 100) / asp / oh * 100, minH, 100);
+        y = clamp(y + (height - newH) / 2, 0, 100 - newH);
         height = newH;
       } else {
-        // corner — drive from whichever axis changed more
-        const absDx = Math.abs(dx);
-        const absDy = Math.abs(dy);
-        if (absDx >= absDy) {
-          const newPxH = (width * overlayW) / asp;
-          height = newPxH / overlayH;
-        } else {
-          const newPxW = (height * overlayH) * asp;
-          width = newPxW / overlayW;
-        }
-        if (['tl', 'tr'].includes(handle)) y = start.y + start.height - height;
-        if (['tl', 'bl'].includes(handle)) x = start.x + start.width - width;
+        const newH = (width * ow / 100) / asp / oh * 100;
+        height = clamp(newH, minH, 100);
+        if (handle === 'tl' || handle === 'tr') y = start.y + start.height - height;
+        if (handle === 'tl' || handle === 'bl') x = start.x + start.width - width;
       }
-      // Final clamp
-      x = Math.max(0, Math.min(100 - width, x));
-      y = Math.max(0, Math.min(100 - height, y));
-      width = Math.min(100 - x, Math.max(minW, width));
-      height = Math.min(100 - y, Math.max(minH, height));
+      x = clamp(x, 0, 100 - width);
+      y = clamp(y, 0, 100 - height);
+      width = clamp(width, minW, 100 - x);
+      height = clamp(height, minH, 100 - y);
     }
 
     return { x, y, width, height };
-  }, []);
+  };
 
   // ── Pointer event wiring ────────────────────────────────────────
   const startDrag = (handle: HandleType) => (e: React.PointerEvent) => {
@@ -184,13 +175,15 @@ function CustomCropOverlay({ crop, aspect, onChange, onComplete }: CustomCropOve
       setIsDragging(false);
     };
 
-    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointermove', onMove, { passive: false });
     window.addEventListener('pointerup', onUp);
     return () => {
       window.removeEventListener('pointermove', onMove);
       window.removeEventListener('pointerup', onUp);
     };
-  }, [onChange, onComplete, aspect, computeNewCrop]);
+  // computeNewCrop is stable (no deps), aspect/onChange/onComplete are stable refs from parent
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [aspect, onChange, onComplete]);
 
   // ── Render ──────────────────────────────────────────────────────
   // Scrim panels (4 rects covering outside-crop area)
@@ -200,28 +193,37 @@ function CustomCropOverlay({ crop, aspect, onChange, onComplete }: CustomCropOve
   const Corner = ({ pos, cursor, handle }: { pos: 'tl'|'tr'|'bl'|'br'; cursor: string; handle: HandleType }) => {
     const isLeft = pos.endsWith('l');
     const isTop  = pos.startsWith('t');
+    const hitSize = isMobile ? 56 : 32;
+    const offset  = isMobile ? -10 : -4;
+    const armLen  = isMobile ? 24 : 18;
+    const armThick = isMobile ? 4 : 3;
     return (
       <div
         onPointerDown={startDrag(handle)}
-        className="absolute w-8 h-8 z-20"
+        className="absolute z-20"
         style={{
           cursor,
-          [isLeft ? 'left' : 'right']: '-4px',
-          [isTop  ? 'top'  : 'bottom']: '-4px',
+          width: hitSize,
+          height: hitSize,
+          [isLeft ? 'left' : 'right']: offset,
+          [isTop  ? 'top'  : 'bottom']: offset,
           touchAction: 'none',
+          display: 'flex',
+          alignItems: isTop ? 'flex-start' : 'flex-end',
+          justifyContent: isLeft ? 'flex-start' : 'flex-end',
         }}
       >
         {/* horizontal arm */}
         <div className="absolute bg-white rounded-sm" style={{
-          width: 18, height: 3,
-          [isLeft ? 'left' : 'right']: 0,
-          [isTop  ? 'top'  : 'bottom']: 0,
+          width: armLen, height: armThick,
+          [isLeft ? 'left' : 'right']: isMobile ? 6 : 0,
+          [isTop  ? 'top'  : 'bottom']: isMobile ? 6 : 0,
         }} />
         {/* vertical arm */}
         <div className="absolute bg-white rounded-sm" style={{
-          width: 3, height: 18,
-          [isLeft ? 'left' : 'right']: 0,
-          [isTop  ? 'top'  : 'bottom']: 0,
+          width: armThick, height: armLen,
+          [isLeft ? 'left' : 'right']: isMobile ? 6 : 0,
+          [isTop  ? 'top'  : 'bottom']: isMobile ? 6 : 0,
         }} />
       </div>
     );
@@ -230,6 +232,11 @@ function CustomCropOverlay({ crop, aspect, onChange, onComplete }: CustomCropOve
   // Edge handle renderer — pill shape
   const Edge = ({ side, handle }: { side: 't'|'b'|'l'|'r'; handle: HandleType }) => {
     const isHoriz = side === 't' || side === 'b';
+    const hitThick = isMobile ? 48 : 16;
+    const hitLong  = isMobile ? 64 : 44;
+    const barLong  = isMobile ? 36 : 28;
+    const barThick = isMobile ? 4 : 3;
+    const offset   = -(hitThick / 2);
     return (
       <div
         onPointerDown={startDrag(handle)}
@@ -237,14 +244,14 @@ function CustomCropOverlay({ crop, aspect, onChange, onComplete }: CustomCropOve
         style={{
           cursor: isHoriz ? 'ns-resize' : 'ew-resize',
           touchAction: 'none',
-          ...(side === 't' ? { top: -8, left: '50%', transform: 'translateX(-50%)', width: 44, height: 16 } :
-              side === 'b' ? { bottom: -8, left: '50%', transform: 'translateX(-50%)', width: 44, height: 16 } :
-              side === 'l' ? { left: -8, top: '50%', transform: 'translateY(-50%)', width: 16, height: 44 } :
-                             { right: -8, top: '50%', transform: 'translateY(-50%)', width: 16, height: 44 }),
+          ...(side === 't' ? { top: offset, left: '50%', transform: 'translateX(-50%)', width: hitLong, height: hitThick } :
+              side === 'b' ? { bottom: offset, left: '50%', transform: 'translateX(-50%)', width: hitLong, height: hitThick } :
+              side === 'l' ? { left: offset, top: '50%', transform: 'translateY(-50%)', width: hitThick, height: hitLong } :
+                             { right: offset, top: '50%', transform: 'translateY(-50%)', width: hitThick, height: hitLong }),
         }}
       >
         <div className="bg-white rounded-full" style={
-          isHoriz ? { width: 28, height: 3 } : { width: 3, height: 28 }
+          isHoriz ? { width: barLong, height: barThick } : { width: barThick, height: barLong }
         } />
       </div>
     );
@@ -254,7 +261,7 @@ function CustomCropOverlay({ crop, aspect, onChange, onComplete }: CustomCropOve
     <div
       ref={overlayRef}
       className="absolute inset-0"
-      style={{ cursor: isDragging ? 'grabbing' : 'default' }}
+      style={{ cursor: isDragging ? 'grabbing' : 'default', touchAction: 'none' }}
     >
       {/* ── Scrim panels ── */}
       {/* Top */}
@@ -334,6 +341,7 @@ export function StudioCanvas({ file, isCropActive, cropAspect, onCropChange, onC
   const previewCanvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const innerRef = useRef<HTMLDivElement>(null);
+  const isMobile = useIsMobile();
 
   const [cropDimensions, setCropDimensions] = useState({ width: 0, height: 0 });
   const [innerHeight, setInnerHeight] = useState<number | undefined>(undefined);
@@ -529,6 +537,7 @@ export function StudioCanvas({ file, isCropActive, cropAspect, onCropChange, onC
                 aspect={cropAspect}
                 onChange={onCropChange}
                 onComplete={onCropComplete}
+                isMobile={isMobile}
               />
               <ProcessingOverlay isVisible={isProcessingMagic} />
             </div>
