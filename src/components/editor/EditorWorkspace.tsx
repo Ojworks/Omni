@@ -4,6 +4,7 @@ import { EditorToolbar } from './EditorToolbar';
 import { StudioCanvas } from './StudioCanvas';
 import { BatchSidebar } from './BatchSidebar';
 import { MobileToolSelector, ToolCategory } from './MobileToolSelector';
+import { MobileToolScreen } from './MobileToolScreen';
 import { UploadDropzone } from './UploadDropzone';
 import { ConfirmationModal } from './ConfirmationModal';
 import { Crop } from 'react-image-crop';
@@ -31,6 +32,7 @@ export function EditorWorkspace({ files, setFiles, onClose, onAddFiles }: Editor
 
   const [isCropActive, setIsCropActive] = useState(false);
   const [cropAspect, setCropAspect] = useState<number | undefined>(undefined);
+  const [crop, setCrop] = useState<Crop | undefined>(undefined);
   const [isExporting, setIsExporting] = useState(false);
   const [selectedFormat, setSelectedFormat] = useState<FileFormat>('image/jpeg');
   const [exportQuality, setExportQuality] = useState(90);
@@ -381,6 +383,15 @@ export function EditorWorkspace({ files, setFiles, onClose, onAddFiles }: Editor
     }));
   };
 
+  const handleResetAll = () => {
+    setFiles(prev => prev.map(f => {
+      const edits = { ...defaultEdits };
+      const history = f.history.slice(0, f.historyIndex + 1);
+      history.push(edits);
+      return { ...f, edits, history, historyIndex: history.length - 1 };
+    }));
+  };
+
   const handleRemoveBackground = async () => {
     if (!activeFile || isProcessingRef.current || activeFile.hasBackgroundRemoved) return;
     isProcessingRef.current = true;
@@ -574,100 +585,51 @@ export function EditorWorkspace({ files, setFiles, onClose, onAddFiles }: Editor
                 />
               </div>
 
-              {/* Mobile bottom sheet tool panel — always sits on top of the canvas, never replaces it */}
+              {/* Mobile Tool Screen */}
               <div className="lg:hidden flex flex-col w-full relative">
                 <AnimatePresence initial={false}>
                   {activeCategory !== 'none' && (
-                    <motion.div
-                      key="mobile-tool-sheet"
-                      initial={{ y: '100%' }}
-                      animate={{ y: 0 }}
-                      exit={{ y: '100%' }}
-                      transition={{ type: 'tween', duration: 0.28, ease: [0.32, 0.72, 0, 1] }}
-                      className="absolute bottom-0 left-0 right-0 z-40 bg-surface border-t border-border rounded-t-2xl shadow-[0_-12px_40px_rgba(0,0,0,0.2)] overflow-visible will-change-transform"
-                      style={{ backfaceVisibility: 'hidden' }}
-                    >
-                      {/* Sheet header: Cancel / Title / Done */}
-                      <div className="relative flex items-center justify-between border-b border-border bg-surface/80 backdrop-blur-xl rounded-t-2xl h-14 shrink-0 w-full">
-                        <button
-                          onClick={handleCancelTool}
-                          className="flex items-center gap-1.5 h-full px-4 text-[10px] font-brand font-black uppercase tracking-widest text-muted hover:text-fg transition-colors active:scale-95 cursor-pointer z-20"
-                        >
-                          <ArrowLeft className="h-4 w-4" />
-                          Cancel
-                        </button>
-                        <h3 className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-center text-xs sm:text-sm font-black tracking-widest uppercase font-brand truncate max-w-[40%] select-none pointer-events-none z-10">
-                          {activeCategory === 'transform' ? (isCropActive ? 'Crop' : 'Transform') :
-                           activeCategory === 'adjust' ? 'Adjust' :
-                           activeCategory === 'filters' ? 'Filters' :
-                           activeCategory === 'resize' ? 'Resize' :
-                           activeCategory === 'batch' ? 'Files' :
-                           activeCategory === 'magic' ? 'Magic' :
-                           activeCategory === 'export' ? 'Export' : 'OMNI'}
-                        </h3>
-                        {activeCategory !== 'export' ? (
-                          <button
-                            onClick={handleApplyTool}
-                            className="h-full px-4 flex items-center justify-center text-[10px] font-brand font-black uppercase tracking-widest text-accent hover:opacity-70 transition-opacity active:scale-95 cursor-pointer z-20"
-                          >
-                            {activeCategory === 'batch' ? 'Select' : 'Done'}
-                          </button>
-                        ) : (
-                          <button
-                            disabled={isExporting}
-                            onClick={async () => {
-                              await handleExport(selectedFormat, false, exportQuality / 100);
-                              setActiveCategory('none');
-                            }}
-                            className="h-full px-4 flex items-center justify-center text-[10px] font-brand font-black uppercase tracking-widest text-accent hover:opacity-70 transition-opacity active:scale-95 cursor-pointer z-20 disabled:opacity-50 disabled:pointer-events-none"
-                          >
-                            {isExporting ? 'Saving...' : 'Export'}
-                          </button>
-                        )}
-                      </div>
-
-                      {/* Tool panel content */}
-                      <EditorToolbar 
-                          file={activeFile}
-                          files={files}
-                          onEditChange={handleEditChange}
-                          isCropActive={isCropActive}
-                          setIsCropActive={setIsCropActive}
-                          onUndo={handleUndo}
-                          onRedo={handleRedo}
-                          hasUndo={activeFile.historyIndex > 0}
-                          hasRedo={activeFile.historyIndex < activeFile.history.length - 1}
-                          onApplyEditsToAll={handleApplyEditsToAll}
-                          cropAspect={cropAspect}
-                          setCropAspect={setCropAspect}
-                          onCancelCrop={handleCancelCrop}
-                          onConfirmCrop={handleConfirmCrop}
-                          mode="mobile"
-                          activeCategory={activeCategory}
-                          onCloseMobile={() => setActiveCategory('none')}
-                          setActiveFileId={setActiveFileId}
-                          removeFile={removeFile}
-                          onAddFiles={onAddFiles}
-                          onExport={handleExport}
-                          isExporting={isExporting}
-                          selectedFormat={selectedFormat}
-                          onFormatChange={setSelectedFormat}
-                          exportQuality={exportQuality}
-                          setExportQuality={setExportQuality}
-                          onRemoveBackground={handleRemoveBackground}
-                          isProcessingMagic={isProcessingMagic}
-                          magicError={magicError}
-                          onDismissMagicError={() => setMagicError(null)}
-                          className="!border-t-0 bg-transparent"
-                      />
-                    </motion.div>
+                    <MobileToolScreen
+                      activeFile={activeFile}
+                      files={files}
+                      activeCategory={activeCategory}
+                      onClose={() => setActiveCategory('none')}
+                      onEditChange={handleEditChange}
+                      isCropActive={isCropActive}
+                      setIsCropActive={setIsCropActive}
+                      cropAspect={cropAspect}
+                      setCropAspect={setCropAspect}
+                      onUndo={handleUndo}
+                      onRedo={handleRedo}
+                      hasUndo={activeFile.historyIndex > 0}
+                      hasRedo={activeFile.historyIndex < activeFile.history.length - 1}
+                      onApplyEditsToAll={handleApplyEditsToAll}
+                      onCancelCrop={handleCancelCrop}
+                      onConfirmCrop={handleConfirmCrop}
+                      setActiveFileId={setActiveFileId}
+                      removeFile={removeFile}
+                      onAddFiles={onAddFiles}
+                      onExport={handleExport}
+                      isExporting={isExporting}
+                      selectedFormat={selectedFormat}
+                      onFormatChange={setSelectedFormat}
+                      exportQuality={exportQuality}
+                      setExportQuality={setExportQuality}
+                      onRemoveBackground={handleRemoveBackground}
+                      isProcessingMagic={isProcessingMagic}
+                      magicError={magicError}
+                      onDismissMagicError={() => setMagicError(null)}
+                      onResetAll={handleResetAll}
+                      crop={crop}
+                      setCrop={setCrop}
+                    />
                   )}
                 </AnimatePresence>
 
                 <MobileToolSelector 
                    activeCategory={activeCategory} 
                    setActiveCategory={setActiveCategory}
-                   className="z-50 w-full"
+                   className={`z-50 w-full transition-transform duration-300 ${activeCategory !== 'none' ? 'translate-y-full' : 'translate-y-0'}`}
                 />
               </div>
             </div>
@@ -685,6 +647,8 @@ export function EditorWorkspace({ files, setFiles, onClose, onAddFiles }: Editor
                onReorder={setFiles}
                exportQuality={exportQuality}
                setExportQuality={setExportQuality}
+               onApplyEditsToAll={() => handleApplyEditsToAll(activeFile!.edits)}
+               onResetAll={handleResetAll}
                className="hidden lg:flex transition-all duration-300"
             />
           </motion.div>

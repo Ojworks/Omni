@@ -5,7 +5,7 @@ export function Terms() {
     <div className="container mx-auto max-w-3xl px-6 py-20 flex-1">
       <h1 className="text-4xl font-brand font-black tracking-tighter uppercase mb-8">Terms of Service</h1>
       <div className="prose prose-sm dark:prose-invert max-w-none text-muted">
-        <p className="mb-4">Last updated: May 25, 2026</p>
+        <p className="mb-4">Last updated: May 26, 2026</p>
         <h2 className="text-lg font-bold text-fg mt-8 mb-4 uppercase tracking-widest">1. Terms</h2>
         <p className="mb-4">
           By using OMNI, you agree to these Terms of Service. If you do not agree with any part of these terms, please do not use the site.

@@ -15,12 +15,12 @@ const faqs = [
   {
     icon: <FileText className="h-5 w-5" />,
     question: "What file formats are supported?",
-    answer: "OMNI supports common image types like JPG, PNG, and WEBP, as well as PDFs. When you add a PDF document, it is automatically converted into high-quality images so you can easily edit and save it."
+    answer: "OMNI supports common image types like JPG, PNG, and WEBP, as well as PDFs. When you add a PDF document, it is automatically converted into high-quality images so you can easily edit and save it. You can also apply any of the 14 built-in filters and export back to your preferred format."
   },
   {
     icon: <Zap className="h-5 w-5" />,
     question: "How do batch edits work?",
-    answer: "You can select multiple files at once in the sidebar and apply changes like filters, crops, or resizing to all of them at the same time. This is perfect for quickly processing large sets of student work or class projects."
+    answer: "You can load multiple files at once and edit them as a batch. After editing one image, tap \"Apply to All\" to copy those edits — filters, rotation, flip, and resize — to every file in your batch. You can also \"Reset All\" to clear edits across all files at once. Crop is always kept per-image since it's usually unique to each photo."
   },
   {
     icon: <Globe className="h-5 w-5" />,

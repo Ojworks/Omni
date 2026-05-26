@@ -5,7 +5,7 @@ export function Privacy() {
     <div className="container mx-auto max-w-3xl px-6 py-20 flex-1">
       <h1 className="text-4xl font-brand font-black tracking-tighter uppercase mb-8">Privacy Policy</h1>
       <div className="prose prose-sm dark:prose-invert max-w-none text-muted">
-        <p className="mb-4">Last updated: May 25, 2026</p>
+        <p className="mb-4">Last updated: May 26, 2026</p>
         <h2 className="text-lg font-bold text-fg mt-8 mb-4 uppercase tracking-widest">1. Local Processing</h2>
         <p className="mb-4">
           OMNI is built from the ground up to protect your privacy. Everything you do—like editing images, removing backgrounds with AI, and converting file formats—happens entirely inside your web browser. 

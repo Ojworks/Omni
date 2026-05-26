@@ -20,6 +20,8 @@ interface BatchSidebarProps {
   onReorder?: (files: WorkspaceFile[]) => void;
   exportQuality?: number;
   setExportQuality?: (quality: number) => void;
+  onApplyEditsToAll?: () => void;
+  onResetAll?: () => void;
 }
 
 export function BatchSidebar({ 
@@ -36,7 +38,9 @@ export function BatchSidebar({
   activeCategory,
   onReorder,
   exportQuality = 90,
-  setExportQuality
+  setExportQuality,
+  onApplyEditsToAll,
+  onResetAll,
 }: BatchSidebarProps) {
   const [format, setFormat] = useState<FileFormat>('image/jpeg');
   const [estimatedSize, setEstimatedSize] = useState<number | null>(null);
@@ -227,6 +231,23 @@ export function BatchSidebar({
              <div className="pt-2">
                <UploadDropzone onFilesAccepted={onAddFiles} isCompact />
              </div>
+
+             {files.length > 1 && (
+               <div className="flex gap-2 pt-1">
+                 <button
+                   onClick={onApplyEditsToAll}
+                   className="flex-1 py-2 rounded-lg border border-border text-[10px] font-black uppercase tracking-wider text-muted hover:text-fg hover:border-fg/40 transition-colors"
+                 >
+                   Apply Edits to All
+                 </button>
+                 <button
+                   onClick={onResetAll}
+                   className="flex-1 py-2 rounded-lg border border-border text-[10px] font-black uppercase tracking-wider text-muted hover:text-red-500 hover:border-red-500/40 transition-colors"
+                 >
+                   Reset All
+                 </button>
+               </div>
+             )}
           </div>
       </div>
 

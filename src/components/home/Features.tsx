@@ -14,12 +14,12 @@ export function Features() {
     },
     {
       title: "Fast Batch Editing",
-      description: "Select an entire folder of files to rename, convert, or apply the same color filter to all of them at once.",
+      description: "Load multiple files at once, edit one image, then apply those edits to every file in your batch — or reset them all in one tap.",
       icon: <Layers className="h-5 w-5" />,
     },
     {
       title: "Clear Document Enhancers",
-      description: "Choose from 10+ custom filters like Clean Scan, Mono Sharp, and Blueprint to make scanned pages look crisp and readable.",
+      description: "Choose from 14 custom filters like Clean Scan, Mono Sharp, and Blueprint to make scanned pages look crisp and readable.",
       icon: <Focus className="h-5 w-5" />,
     },
     {

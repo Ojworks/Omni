@@ -3,6 +3,21 @@ import { Calendar, ArrowRight } from "lucide-react";
 
 const changes = [
   {
+    version: "1.1.0",
+    date: "May 26, 2026",
+    title: "Editor Overhaul & Batch Controls",
+    items: [
+      "Rebuilt the desktop editor toolbar with a clean tab-based layout: Filters, Transform, Resize, and Magic — all accessible in one click.",
+      "Filters now show a live color swatch preview so you can see the effect before applying it.",
+      "Improved the mobile editor with larger tap targets, visual filter swatches, and a cleaner layout throughout.",
+      "Replaced the mobile quality slider with a smooth drop-up sheet matching the desktop quality dropdown (Low, Medium, High, Maximum).",
+      "Added \"Apply Edits to All\" and \"Reset All\" batch controls — available in the desktop sidebar and the mobile Files screen.",
+      "Fixed the mobile file thumbnail delete buttons being clipped by the scroll container.",
+      "Fixed a React hooks violation where state was being called after a conditional return in the toolbar."
+    ],
+    type: "Minor"
+  },
+  {
     version: "1.0.0",
     date: "May 25, 2026",
     title: "Initial Launch",
