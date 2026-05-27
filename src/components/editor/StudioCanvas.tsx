@@ -64,15 +64,19 @@ export function StudioCanvas({
     const outputWidth = isRotated ? img.naturalHeight : img.naturalWidth;
     const outputHeight = isRotated ? img.naturalWidth : img.naturalHeight;
     
-    // Fixed max dimensions based on viewport
-    const maxWidth = isMobile ? window.innerWidth * 0.85 : 1400;
-    const maxHeight = isMobile ? window.innerHeight * 0.6 : window.innerHeight * 0.75;
+    // Use larger dimensions for better quality
+    const maxWidth = isMobile ? window.innerWidth * 0.9 : 1600;
+    const maxHeight = isMobile ? window.innerHeight * 0.5 : window.innerHeight * 0.8;
     
     const scale = Math.min(1, maxWidth / outputWidth, maxHeight / outputHeight);
     
     canvas.width = Math.round(outputWidth * scale);
     canvas.height = Math.round(outputHeight * scale);
 
+    // Enable image smoothing for better quality
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.save();
     ctx.translate(canvas.width / 2, canvas.height / 2);
@@ -81,7 +85,7 @@ export function StudioCanvas({
     ctx.scale(scale, scale);
     ctx.drawImage(img, -img.naturalWidth / 2, -img.naturalHeight / 2);
     ctx.restore();
-  }, [imageLoaded, rotate, flipX, flipY, isMobile]);
+  }, [imageLoaded, rotate, flipX, flipY, isMobile, file.id]);
 
   // Crop preview canvas
   useEffect(() => {
