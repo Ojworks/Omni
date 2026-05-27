@@ -1,4 +1,4 @@
-import { useState, useRef, Dispatch, SetStateAction, useEffect } from 'react';
+import { useState, useRef, useCallback, useMemo, Dispatch, SetStateAction, useEffect } from 'react';
 import { WorkspaceFile, ImageEdits, FileFormat, defaultEdits, FILTERS } from '@/src/types';
 import { EditorToolbar } from './EditorToolbar';
 import { StudioCanvas } from './StudioCanvas';
@@ -24,11 +24,16 @@ interface EditorWorkspaceProps {
 export function EditorWorkspace({ files, setFiles, onClose, onAddFiles }: EditorWorkspaceProps) {
   const [activeFileId, setActiveFileId] = useState<string>(files[0]?.id || '');
   const filesRef = useRef(files);
+  const activeFileIdRef = useRef(activeFileId);
 
   // Keep ref in sync with latest files to avoid stale closures in effects without triggering re-runs
   useEffect(() => {
     filesRef.current = files;
   }, [files]);
+
+  useEffect(() => {
+    activeFileIdRef.current = activeFileId;
+  }, [activeFileId]);
 
   const [isCropActive, setIsCropActive] = useState(false);
   const [cropAspect, setCropAspect] = useState<number | undefined>(undefined);
@@ -36,6 +41,9 @@ export function EditorWorkspace({ files, setFiles, onClose, onAddFiles }: Editor
   const [selectedFormat, setSelectedFormat] = useState<FileFormat>('image/jpeg');
   const [exportQuality, setExportQuality] = useState(90);
   const [initialEdits, setInitialEdits] = useState<ImageEdits | undefined>(undefined);
+  // Stores the historyIndex BEFORE the tool was opened, so Cancel can restore
+  // both edits AND history position, preventing undo from stepping into canceled edits.
+  const [initialHistoryIndex, setInitialHistoryIndex] = useState<number>(0);
   // Stores the crop value (or undefined) that was active BEFORE entering crop mode.
   // Used by Cancel to restore cleanly without touching history.
   const [initialCrop, setInitialCrop] = useState<Crop | undefined>(undefined);
@@ -47,11 +55,16 @@ export function EditorWorkspace({ files, setFiles, onClose, onAddFiles }: Editor
   const [isProcessingMagic, setIsProcessingMagic] = useState(false);
   const [magicError, setMagicError] = useState<string | null>(null);
   const isProcessingRef = useRef(false);
+  const isExportingRef = useRef(false);
 
   useEffect(() => {
+    // Read files via ref — NOT in deps — so this only re-runs when the tool
+    // category or active file changes, not on every edit within the session.
+    // This ensures initialEdits captures the state BEFORE the tool was opened.
     const file = filesRef.current.find(f => f.id === activeFileId);
     if (activeCategory !== 'none' && file) {
       setInitialEdits(file.edits);
+      setInitialHistoryIndex(file.historyIndex);
     }
     if (activeCategory === 'none') {
       setInitialEdits(undefined);
@@ -90,74 +103,35 @@ export function EditorWorkspace({ files, setFiles, onClose, onAddFiles }: Editor
       // Switched to desktop: cancel any open mobile tool to rollback unsaved edits
       setActiveCategory(prev => {
         if (prev !== 'none') {
-          // Rollback edits that were in-progress on mobile
-          setInitialEdits(undefined);
           setIsCropActive(false);
           return 'none';
         }
         return prev;
       });
+      // Actually restore edits outside the updater (React anti-pattern to call setters inside)
+      if (initialEdits) {
+        const id = activeFileIdRef.current;
+        setFiles(prev => prev.map(f => {
+          if (f.id === id) {
+            // Truncate history so Redo can't step back into discarded mobile edits
+            const history = f.history.slice(0, initialHistoryIndex + 1);
+            return { ...f, edits: { ...initialEdits }, history, historyIndex: initialHistoryIndex };
+          }
+          return f;
+        }));
+      }
+      setInitialEdits(undefined);
     }
   }, [isMobile, isCropActive]);
 
-  const handleExitClick = () => {
-    if (files.length > 0) {
-      setShowExitModal(true);
-    } else {
-      onClose();
-    }
-  };
+  // ── Core edit functions (defined first — no dependencies on other handlers) ──
 
-  const handleCancelTool = () => {
-    if (initialEdits) {
-      handleEditChange(initialEdits, false);
-    }
-    setActiveCategory('none');
-    setIsCropActive(false);
-  };
-
-  const handleApplyTool = () => {
-    // Mobile "Done": if crop is active, commit it as one history step then close.
-    if (isCropActive) {
-      handleConfirmCrop();
-      setActiveCategory('none');
-      return;
-    }
-    setActiveCategory('none');
-    setIsCropActive(false);
-  };
-
-  const handleCancelCrop = () => {
-    // Restore the exact pre-crop state (crop: undefined if there was none) without touching history.
-    updateCropLive(initialCrop);
-    setIsCropActive(false);
-  };
-
-  // The ONE place a confirmed crop is committed to undo history.
-  const handleConfirmCrop = () => {
-    if (!activeFile) return;
-    // Push the final crop as a brand-new history entry on top of the pre-crop state.
-    handleEditChange({ crop: activeFile.edits.crop }, true);
-    setIsCropActive(false);
-  };
-
-  useEffect(() => {
-    if (!activeFileId && files.length > 0) {
-      setActiveFileId(files[0].id);
-    }
-  }, [files, activeFileId]);
-
-  const activeFile = files.find(f => f.id === activeFileId);
-
-  const handleEditChange = (newEdits: Partial<ImageEdits>, pushHistory = true) => {
-    if (!activeFile) return;
-
+  const handleEditChange = useCallback((newEdits: Partial<ImageEdits>, pushHistory = true) => {
+    const id = activeFileIdRef.current;
     setFiles(prev => prev.map(f => {
-      if (f.id === activeFile.id) {
+      if (f.id === id) {
         const edits = { ...f.edits, ...newEdits };
         if (!pushHistory) {
-          // Only update the active edits, do NOT mutate the current history slot.
-          // This preserves the original state so that Undo can correctly revert uncommitted changes.
           return { ...f, edits };
         }
         const history = f.history.slice(0, f.historyIndex + 1);
@@ -166,65 +140,98 @@ export function EditorWorkspace({ files, setFiles, onClose, onAddFiles }: Editor
       }
       return f;
     }));
-  };
+  }, []);
 
-  // Updates edits.crop live during a drag — history is never touched.
-  // This is the correct way to reflect intermediate crop positions without
-  // polluting the undo stack.
-  const updateCropLive = (crop: Crop | undefined) => {
-    if (!activeFile) return;
+  const updateCropLive = useCallback((crop: Crop | undefined) => {
+    const id = activeFileIdRef.current;
     setFiles(prev => prev.map(f =>
-      f.id === activeFile.id
+      f.id === id
         ? { ...f, edits: { ...f.edits, crop } }
         : f
     ));
-  };
+  }, []);
 
-  const handleUndo = () => {
-    if (!activeFile || activeFile.historyIndex <= 0) return;
+  const handleUndo = useCallback(() => {
+    const id = activeFileIdRef.current;
     setFiles(prev => prev.map(f => {
-      if (f.id === activeFile.id) {
+      if (f.id === id && f.historyIndex > 0) {
         const newIndex = f.historyIndex - 1;
         return { ...f, edits: f.history[newIndex], historyIndex: newIndex };
       }
       return f;
     }));
-  };
+  }, []);
 
-  const handleRedo = () => {
-    if (!activeFile || activeFile.historyIndex >= activeFile.history.length - 1) return;
+  const handleRedo = useCallback(() => {
+    const id = activeFileIdRef.current;
     setFiles(prev => prev.map(f => {
-      if (f.id === activeFile.id) {
+      if (f.id === id && f.historyIndex < f.history.length - 1) {
         const newIndex = f.historyIndex + 1;
         return { ...f, edits: f.history[newIndex], historyIndex: newIndex };
       }
       return f;
     }));
-  };
+  }, []);
 
-  const removeFile = (id: string) => {
-    const fileToRemove = files.find(f => f.id === id);
-    if (!fileToRemove) return;
+  // ── Handlers that depend on core edit functions ──
 
-    const fileHasEdits = fileToRemove.edits.rotate !== 0 ||
-                         fileToRemove.edits.flipX ||
-                         fileToRemove.edits.flipY ||
-                         fileToRemove.edits.filter !== 'none' ||
-                         fileToRemove.edits.crop !== undefined ||
-                         fileToRemove.edits.resize !== undefined;
-
-    const isLastFile = files.length === 1;
-
-    if (fileHasEdits || isLastFile) {
-      setFileToDeleteId(id);
+  const handleExitClick = useCallback(() => {
+    if (filesRef.current.length > 0) {
+      setShowExitModal(true);
     } else {
-      executeRemoveFile(id);
+      onClose();
     }
-  };
+  }, [onClose]);
 
-  const executeRemoveFile = (id: string) => {
-    const isRemovingActive = id === activeFileId;
-    const remainingFiles = files.filter(f => f.id !== id);
+  const handleConfirmCrop = useCallback(() => {
+    const af = filesRef.current.find(f => f.id === activeFileIdRef.current);
+    if (!af) return;
+    handleEditChange({ crop: af.edits.crop }, true);
+    setIsCropActive(false);
+  }, [handleEditChange]);
+
+  const handleCancelCrop = useCallback(() => {
+    updateCropLive(initialCrop);
+    setIsCropActive(false);
+  }, [initialCrop]);
+
+  const handleCancelTool = useCallback(() => {
+    if (initialEdits) {
+      const id = activeFileIdRef.current;
+      setFiles(prev => prev.map(f => {
+        if (f.id === id) {
+          // Truncate history so Redo can't resurface discarded edits after Cancel
+          const history = f.history.slice(0, initialHistoryIndex + 1);
+          return { ...f, edits: { ...initialEdits }, history, historyIndex: initialHistoryIndex };
+        }
+        return f;
+      }));
+    }
+    setActiveCategory('none');
+    setIsCropActive(false);
+  }, [initialEdits, initialHistoryIndex]);
+
+  const handleApplyTool = useCallback(() => {
+    if (isCropActive) {
+      handleConfirmCrop();
+      setActiveCategory('none');
+      return;
+    }
+    setActiveCategory('none');
+    setIsCropActive(false);
+  }, [isCropActive, handleConfirmCrop]);
+
+  useEffect(() => {
+    if (!activeFileId && files.length > 0) {
+      setActiveFileId(files[0].id);
+    }
+  }, [files, activeFileId]);
+
+  const activeFile = useMemo(() => files.find(f => f.id === activeFileId), [files, activeFileId]);
+
+  const executeRemoveFile = useCallback((id: string) => {
+    const isRemovingActive = id === activeFileIdRef.current;
+    const remainingFiles = filesRef.current.filter(f => f.id !== id);
     
     if (remainingFiles.length === 0) {
       onClose();
@@ -235,73 +242,101 @@ export function EditorWorkspace({ files, setFiles, onClose, onAddFiles }: Editor
       }
       setFiles(remainingFiles);
     }
-  };
+  }, [onClose]);
 
-  const updateOutputName = (id: string, name: string) => {
+  const removeFile = useCallback((id: string) => {
+    const fileToRemove = filesRef.current.find(f => f.id === id);
+    if (!fileToRemove) return;
+
+    const fileHasEdits = fileToRemove.edits.rotate !== 0 ||
+                         fileToRemove.edits.flipX ||
+                         fileToRemove.edits.flipY ||
+                         fileToRemove.edits.filter !== 'none' ||
+                         fileToRemove.edits.crop !== undefined ||
+                         fileToRemove.edits.resize !== undefined;
+
+    const isLastFile = filesRef.current.length === 1;
+
+    if (fileHasEdits || isLastFile) {
+      setFileToDeleteId(id);
+    } else {
+      executeRemoveFile(id);
+    }
+  }, [executeRemoveFile]);
+
+  const updateOutputName = useCallback((id: string, name: string) => {
     setFiles(prev => prev.map(f => f.id === id ? { ...f, outputName: name } : f));
-  };
+  }, []);
 
   const processImage = async (file: WorkspaceFile, format: FileFormat, quality: number = 0.9): Promise<{ blob: Blob, dataUrl: string, width: number, height: number }> => {
     return new Promise((resolve, reject) => {
       const img = new Image();
       img.crossOrigin = "anonymous";
       img.onload = () => {
-        const { rotate, flipX, flipY, crop, resize } = file.edits;
-        const rad = (rotate * Math.PI) / 180;
+        const { rotate: rawRotate, flipX, flipY, crop, resize } = file.edits;
+        const cleanRotate = ((rawRotate % 360) + 360) % 360;
+        const rad = (cleanRotate * Math.PI) / 180;
 
-        // ── Step 1: Bake rotation + flip into an intermediate canvas ──
-        // When rotated 90 or 270° the output dimensions swap.
-        const isSwapped = rotate % 180 !== 0;
-        const rotW = isSwapped ? img.height : img.width;
-        const rotH = isSwapped ? img.width  : img.height;
-
-        const rotCanvas = document.createElement('canvas');
-        rotCanvas.width  = rotW;
-        rotCanvas.height = rotH;
-        const rotCtx = rotCanvas.getContext('2d')!;
-
-        rotCtx.save();
-        rotCtx.translate(rotW / 2, rotH / 2);
-        rotCtx.rotate(rad);
-        rotCtx.scale(flipX ? -1 : 1, flipY ? -1 : 1);
-        rotCtx.drawImage(img, -img.width / 2, -img.height / 2);
-        rotCtx.restore();
-
-        // ── Step 2: Determine crop region (relative to rotated canvas) ──
-        let sourceX = 0, sourceY = 0;
-        let sourceWidth  = rotW;
-        let sourceHeight = rotH;
+        // ── Step 1: Crop from original image ──
+        // Crop percentages are defined on the ORIGINAL image (crop mode shows
+        // it unrotated). Rotation is applied to the cropped result.
+        let cropX = 0, cropY = 0;
+        let cropW = img.width, cropH = img.height;
 
         if (crop && crop.width && crop.height) {
-          sourceX      = (crop.x      / 100) * rotW;
-          sourceY      = (crop.y      / 100) * rotH;
-          sourceWidth  = (crop.width  / 100) * rotW;
-          sourceHeight = (crop.height / 100) * rotH;
+          cropX = (crop.x / 100) * img.width;
+          cropY = (crop.y / 100) * img.height;
+          // Clamp to minimum 1px to prevent canvas context crash on zero-size crop
+          cropW = Math.max(1, (crop.width / 100) * img.width);
+          cropH = Math.max(1, (crop.height / 100) * img.height);
         }
 
-        // ── Step 3: Determine final output size (respects manual resize) ──
-        const targetWidth  = resize?.width  ?? Math.round(sourceWidth);
-        const targetHeight = resize?.height ?? Math.round(sourceHeight);
+        const cropCanvas = document.createElement('canvas');
+        cropCanvas.width = Math.round(cropW);
+        cropCanvas.height = Math.round(cropH);
+        const cropCtx = cropCanvas.getContext('2d')!;
+        cropCtx.drawImage(img, cropX, cropY, cropW, cropH, 0, 0, cropW, cropH);
 
-        // ── Step 4: Draw cropped + resized image with pixel filters ──
+        // ── Step 2: Apply rotation + flip to the cropped result ──
+        const isSwapped = cleanRotate % 180 !== 0;
+        const rotW = isSwapped ? cropH : cropW;
+        const rotH = isSwapped ? cropW : cropH;
+
+        const rotCanvas = document.createElement('canvas');
+        rotCanvas.width = Math.round(rotW);
+        rotCanvas.height = Math.round(rotH);
+        const rotCtx = rotCanvas.getContext('2d')!;
+        rotCtx.save();
+        rotCtx.translate(rotCanvas.width / 2, rotCanvas.height / 2);
+        rotCtx.rotate(rad);
+        rotCtx.scale(flipX ? -1 : 1, flipY ? -1 : 1);
+        rotCtx.drawImage(cropCanvas, -cropW / 2, -cropH / 2);
+        rotCtx.restore();
+
+        // ── Step 3: Determine final output size (respects manual resize) ──
+        const targetWidth  = resize?.width  ?? Math.round(rotW);
+        const targetHeight = resize?.height ?? Math.round(rotH);
+
+        // ── Step 4: Draw rotated + resized image with pixel filters ──
         const outCanvas = document.createElement('canvas');
         outCanvas.width  = targetWidth;
         outCanvas.height = targetHeight;
         const outCtx = outCanvas.getContext('2d')!;
 
-        // Look up the CSS filter value from FILTERS array
         const filterDef = FILTERS.find(f => f.id === file.edits.filter);
         const filterStr = filterDef && filterDef.css !== 'none' ? filterDef.css : '';
         outCtx.filter = filterStr;
 
         outCtx.drawImage(
           rotCanvas,
-          sourceX, sourceY, sourceWidth, sourceHeight,
+          0, 0, rotCanvas.width, rotCanvas.height,
           0, 0, targetWidth, targetHeight
         );
 
         const outFormat = format === 'original' ? file.file.type : format;
-        const dataUrl = outCanvas.toDataURL(outFormat, quality);
+        // Canvas toBlob/toDataURL expect quality in [0, 1]; our UI stores [0, 100]
+        const outQuality = quality > 1 ? quality / 100 : quality;
+        const dataUrl = outCanvas.toDataURL(outFormat, outQuality);
 
         outCanvas.toBlob((blob) => {
           if (blob) {
@@ -309,17 +344,22 @@ export function EditorWorkspace({ files, setFiles, onClose, onAddFiles }: Editor
           } else {
             reject(new Error('Canvas toBlob failed'));
           }
-        }, outFormat, quality);
+        }, outFormat, outQuality);
       };
       img.onerror = reject;
       img.src = file.originalUrl;
     });
   };
 
-  const handleExport = async (format: FileFormat, batch: boolean, quality: number = 0.9) => {
+  const handleExport = useCallback(async (format: FileFormat, batch: boolean, quality: number = 0.9) => {
+    if (isExportingRef.current) return;
+    isExportingRef.current = true;
     setIsExporting(true);
     try {
-      const filesToProcess = batch ? files : [activeFile!];
+      const ref = filesRef.current;
+      const af = ref.find(f => f.id === activeFileIdRef.current);
+      const filesToProcess = batch ? ref : (af ? [af] : []);
+      if (filesToProcess.length === 0) return;
 
       if (format === 'application/pdf') {
         let defaultPdfName = filesToProcess.length > 1 ? 'Omni_Collection' : filesToProcess[0].outputName;
@@ -331,7 +371,6 @@ export function EditorWorkspace({ files, setFiles, onClose, onAddFiles }: Editor
         let pdf: jsPDF | null = null;
         
         for (let i = 0; i < filesToProcess.length; i++) {
-          // Using JPEG for PDF generation with quality compression
           const processed = await processImage(filesToProcess[i], 'image/jpeg', quality);
           
           if (!pdf) {
@@ -354,7 +393,9 @@ export function EditorWorkspace({ files, setFiles, onClose, onAddFiles }: Editor
       } else {
         for (const f of filesToProcess) {
           const processed = await processImage(f, format, quality);
-          const ext = format === 'original' ? f.file.name.split('.').pop() : format.split('/')[1];
+          const ext = format === 'original'
+            ? (f.file.name.split('.').pop() || f.file.type.split('/')[1] || 'bin')
+            : (format.split('/')[1] || 'bin');
           
           const a = document.createElement('a');
           a.href = processed.dataUrl;
@@ -368,10 +409,11 @@ export function EditorWorkspace({ files, setFiles, onClose, onAddFiles }: Editor
       console.error(err);
     } finally {
       setIsExporting(false);
+      isExportingRef.current = false;
     }
-  };
+  }, []);
 
-  const handleApplyEditsToAll = (editsToApply: Partial<ImageEdits>) => {
+  const handleApplyEditsToAll = useCallback((editsToApply: Partial<ImageEdits>) => {
     setFiles(prev => prev.map(f => {
       const edits = { ...f.edits, ...editsToApply };
       // Preserve crop as it is usually image-specific
@@ -380,36 +422,40 @@ export function EditorWorkspace({ files, setFiles, onClose, onAddFiles }: Editor
       history.push(edits);
       return { ...f, edits, history, historyIndex: history.length - 1 };
     }));
-  };
+  }, []);
 
-  const handleResetAll = () => {
+  const handleResetAll = useCallback(() => {
     setFiles(prev => prev.map(f => {
       const edits = { ...defaultEdits };
       const history = f.history.slice(0, f.historyIndex + 1);
       history.push(edits);
       return { ...f, edits, history, historyIndex: history.length - 1 };
     }));
-  };
+  }, []);
 
-  const handleRemoveBackground = async () => {
-    if (!activeFile || isProcessingRef.current || activeFile.hasBackgroundRemoved) return;
+  const handleRemoveBackground = useCallback(async () => {
+    const af = filesRef.current.find(f => f.id === activeFileIdRef.current);
+    if (!af || isProcessingRef.current || af.hasBackgroundRemoved) return;
     isProcessingRef.current = true;
     setIsProcessingMagic(true);
     setMagicError(null);
     try {
-      // Process the image first to bake in any rotation/crop
-      const processed = await processImage(activeFile, 'image/png');
+      const processed = await processImage(af, 'image/png');
 
-      // Call removeBackground directly — running it in a Worker was blocked by
-      // Cross-Origin-Embedder-Policy: require-corp, which prevents the worker
-      // from fetching the ONNX/WASM models from the img.ly CDN.
       const blob = await removeBackground(processed.blob);
 
       const url = URL.createObjectURL(blob);
-      const newFile = new File([blob], `${activeFile.outputName}-nobg.png`, { type: 'image/png' });
+      const newFile = new File([blob], `${af.outputName}-nobg.png`, { type: 'image/png' });
+
+      // Revoke the old original URL before replacing it — App.tsx revoker won't
+      // catch this because the file ID stays the same after background removal.
+      URL.revokeObjectURL(af.originalUrl);
+      if (af.previewUrl && af.previewUrl !== af.originalUrl) {
+        URL.revokeObjectURL(af.previewUrl);
+      }
       
       setFiles(prev => prev.map(f => {
-        if (f.id === activeFile.id) {
+        if (f.id === af.id) {
           return {
             ...f,
             file: newFile,
@@ -431,7 +477,7 @@ export function EditorWorkspace({ files, setFiles, onClose, onAddFiles }: Editor
       isProcessingRef.current = false;
       setIsProcessingMagic(false);
     }
-  };
+  }, []);
 
   const isUnexpectedlyMissing = files.length > 0 && activeFileId !== '' && !activeFile;
 
@@ -499,7 +545,7 @@ export function EditorWorkspace({ files, setFiles, onClose, onAddFiles }: Editor
                mode="desktop"
             />
             
-            <div className="flex-1 flex flex-col min-w-0 bg-surface h-full relative overflow-hidden">
+            <div className="flex-1 flex flex-col min-w-0 h-full relative overflow-hidden">
               <div className="hidden lg:flex h-16 items-center px-6 border-b border-border bg-surface shrink-0 gap-4 z-20">
                 <button 
                   onClick={handleExitClick}
@@ -512,7 +558,7 @@ export function EditorWorkspace({ files, setFiles, onClose, onAddFiles }: Editor
                 <span className="font-mono text-[10px] uppercase font-bold tracking-widest text-muted truncate flex-1">{activeFile.file.name}</span>
               </div>
               
-              <div className="flex-1 relative min-h-0 flex flex-col">
+              <div className="flex-1 relative min-h-0 flex flex-col justify-center lg:justify-start">
                 {/* Mobile floating control bar — back, undo, redo, reset */}
                 <div className="lg:hidden absolute top-0 left-0 right-0 flex items-center justify-between px-3 pt-3 z-30 pointer-events-none">
                   {/* Back / Exit */}
@@ -563,23 +609,15 @@ export function EditorWorkspace({ files, setFiles, onClose, onAddFiles }: Editor
                 </div>
 
                 {/* Canvas fills remaining space; pt-14 reserves space for the floating top bar */}
+                {/* Single StudioCanvas instance — avoids double baking and double blob URLs.
+                    Mobile gets top padding to clear the floating control bar. */}
                 <StudioCanvas 
                    file={activeFile} 
                    isCropActive={isCropActive}
                    cropAspect={cropAspect}
                    onCropChange={(c) => updateCropLive(c)}
                    onCropComplete={(c) => updateCropLive(c)}
-                   className="lg:hidden pt-14"
-                   isProcessingMagic={isProcessingMagic}
-                />
-                {/* Desktop canvas — no floating bar, no top padding needed */}
-                <StudioCanvas 
-                   file={activeFile} 
-                   isCropActive={isCropActive}
-                   cropAspect={cropAspect}
-                   onCropChange={(c) => updateCropLive(c)}
-                   onCropComplete={(c) => updateCropLive(c)}
-                   className="hidden lg:flex"
+                   className={isMobile ? 'pt-14' : ''}
                    isProcessingMagic={isProcessingMagic}
                 />
               </div>
@@ -643,6 +681,8 @@ export function EditorWorkspace({ files, setFiles, onClose, onAddFiles }: Editor
                onExport={handleExport}
                isExporting={isExporting}
                activeCategory={activeCategory}
+               selectedFormat={selectedFormat}
+               onFormatChange={setSelectedFormat}
                onReorder={setFiles}
                exportQuality={exportQuality}
                setExportQuality={setExportQuality}

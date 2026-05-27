@@ -1,18 +1,12 @@
+import { memo } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { ArrowLeft, Check, ChevronUp, X } from "lucide-react";
+import { ArrowLeft, Check, Download, X } from "lucide-react";
 import { useState } from "react";
 import { StudioCanvas } from './StudioCanvas';
-import { EditorToolbar } from './EditorToolbar';
+import { EditorToolbar, QUALITY_OPTIONS } from './EditorToolbar';
 import { WorkspaceFile, ImageEdits, FileFormat } from '@/src/types';
 import { ToolCategory } from './MobileToolSelector';
 import { Crop } from 'react-image-crop';
-
-const QUALITY_OPTIONS = [
-  { value: 60,  label: 'Low (Web)'           },
-  { value: 80,  label: 'Medium (Social)'     },
-  { value: 90,  label: 'High (Print)'        },
-  { value: 100, label: 'Maximum (Lossless)'  },
-];
 
 interface MobileToolScreenProps {
   activeFile: WorkspaceFile;
@@ -49,7 +43,7 @@ interface MobileToolScreenProps {
   onCancelTool: () => void;
 }
 
-export function MobileToolScreen({
+export const MobileToolScreen = memo(function MobileToolScreen({
   activeFile,
   files,
   activeCategory,
@@ -131,31 +125,35 @@ export function MobileToolScreen({
       style={{ overscrollBehavior: 'none' }}
     >
       {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3 bg-surface border-b border-border shrink-0">
+      <div className="grid grid-cols-3 items-center px-4 py-3 bg-surface border-b border-border shrink-0">
         <button
           onClick={handleCancel}
           disabled={isProcessingMagic}
-          className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-muted hover:text-fg hover:bg-surface-hover disabled:opacity-30 disabled:pointer-events-none transition-colors active:scale-95"
+          className="justify-self-start flex items-center gap-1.5 px-3 py-2 rounded-xl text-muted hover:text-fg hover:bg-surface-hover disabled:opacity-30 disabled:pointer-events-none transition-colors active:scale-95"
         >
           <ArrowLeft className="h-4 w-4" />
           <span className="text-xs font-black uppercase tracking-wide">Cancel</span>
         </button>
 
-        <h1 className="text-sm font-black uppercase tracking-widest text-fg">
+        <h1 className="text-sm font-black uppercase tracking-widest text-fg text-center truncate">
           {getCategoryTitle()}
         </h1>
 
-        <button
-          onClick={handleDone}
-          disabled={isExporting || isProcessingMagic}
-          className="flex items-center gap-1.5 px-4 py-2 bg-accent hover:opacity-90 disabled:opacity-50 text-accent-fg rounded-xl transition-colors active:scale-95 text-xs font-black uppercase tracking-wide"
-        >
-          {isExporting || isProcessingMagic
-            ? <div className="h-3.5 w-3.5 border-2 border-accent-fg/30 border-t-accent-fg rounded-full animate-spin" />
-            : <Check className="h-3.5 w-3.5" />
-          }
-          {isExporting ? 'Saving…' : isProcessingMagic ? 'Processing…' : 'Done'}
-        </button>
+        {activeCategory === 'magic' && !activeFile.hasBackgroundRemoved && !isProcessingMagic ? (
+          <div />
+        ) : (
+          <button
+            onClick={handleDone}
+            disabled={isExporting || isProcessingMagic}
+            className="justify-self-end flex items-center gap-1.5 px-4 py-2 bg-accent hover:opacity-90 disabled:opacity-50 text-accent-fg rounded-xl transition-colors active:scale-95 text-xs font-black uppercase tracking-wide"
+          >
+            {isExporting || isProcessingMagic
+              ? <div className="h-3.5 w-3.5 border-2 border-accent-fg/30 border-t-accent-fg rounded-full animate-spin" />
+              : activeCategory === 'export' ? <Download className="h-3.5 w-3.5" /> : <Check className="h-3.5 w-3.5" />
+            }
+            {isExporting ? 'Saving…' : isProcessingMagic ? 'Processing…' : activeCategory === 'export' ? 'Export' : activeCategory === 'batch' ? 'Select' : 'Done'}
+          </button>
+        )}
       </div>
 
       {/* Canvas Area */}
@@ -172,7 +170,7 @@ export function MobileToolScreen({
       </div>
 
       {/* Tool Controls */}
-      <div className="bg-surface border-t border-border pb-safe shrink-0">
+      <div className="bg-surface border-t border-border pb-safe shrink-0 overflow-y-auto max-h-[45vh]">
         <EditorToolbar 
           file={activeFile}
           files={files}
@@ -253,4 +251,4 @@ export function MobileToolScreen({
     </AnimatePresence>
     </>
   );
-}
+});

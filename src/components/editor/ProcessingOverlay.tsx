@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Wand2 } from 'lucide-react';
 
@@ -5,7 +6,7 @@ interface ProcessingOverlayProps {
   isVisible: boolean;
 }
 
-export function ProcessingOverlay({ isVisible }: ProcessingOverlayProps) {
+export const ProcessingOverlay = memo(function ProcessingOverlay({ isVisible }: ProcessingOverlayProps) {
   return (
     <AnimatePresence>
       {isVisible && (
@@ -62,4 +63,4 @@ export function ProcessingOverlay({ isVisible }: ProcessingOverlayProps) {
       )}
     </AnimatePresence>
   );
-}
+});

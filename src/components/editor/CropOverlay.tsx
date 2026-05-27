@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useState } from 'react';
+import React, { useRef, useEffect, useState, useCallback } from 'react';
 import { type Crop } from 'react-image-crop';
 
 type HandleType = 'move' | 'nw' | 'ne' | 'sw' | 'se' | 'n' | 's' | 'e' | 'w';
@@ -11,9 +11,10 @@ interface CropOverlayProps {
   isMobile?: boolean;
 }
 
-export function CropOverlay({ crop, aspect, onChange, onComplete, isMobile = false }: CropOverlayProps) {
+export const CropOverlay = React.memo(function CropOverlay({ crop, aspect, onChange, onComplete, isMobile = false }: CropOverlayProps) {
   const overlayRef = useRef<HTMLDivElement>(null);
   const [dragging, setDragging] = useState(false);
+  const rafRef = useRef(0);
   const dragStateRef = useRef<{
     handle: HandleType;
     startX: number;
@@ -28,17 +29,44 @@ export function CropOverlay({ crop, aspect, onChange, onComplete, isMobile = fal
   const w = crop.width ?? 100;
   const h = crop.height ?? 100;
 
-  // Apply aspect ratio when it changes
+  // Keep lastCropRef in sync so that a click-without-drag doesn't reset to stale values
+  const lastCropRef = useRef({ x, y, w, h });
   useEffect(() => {
+    lastCropRef.current = { x, y, w, h };
+  }, [x, y, w, h]);
+
+  // Store latest callbacks/props in refs to avoid re-registering window listeners on every frame
+  const propsRef = useRef({ onChange, onComplete, isMobile, aspect });
+  useEffect(() => {
+    propsRef.current = { onChange, onComplete, isMobile, aspect };
+  });
+
+  // Apply aspect ratio when it changes (skip initial mount — crop is already valid)
+  const mountedRef = useRef(false);
+  useEffect(() => {
+    if (!mountedRef.current) { mountedRef.current = true; return; }
     if (!aspect || !overlayRef.current) return;
     const rect = overlayRef.current.getBoundingClientRect();
-    const pxW = (w / 100) * rect.width;
-    const pxH = pxW / aspect;
-    const newH = (pxH / rect.height) * 100;
+    if (rect.height === 0) return;
+    const current = lastCropRef.current;
+    let pxW = (current.w / 100) * rect.width;
+    let pxH = pxW / aspect;
+    let newH = (pxH / rect.height) * 100;
+    let newW = current.w;
+    let newX = current.x;
+
+    // If height exceeds bounds, scale width down to preserve aspect ratio
+    if (newH > 100) {
+      newH = 100;
+      const targetPxW = (newH / 100) * rect.height * aspect;
+      newW = (targetPxW / rect.width) * 100;
+      newX = Math.max(0, Math.min(100 - newW, current.x + (current.w - newW) / 2));
+    }
+
     const clampedH = Math.min(100, Math.max(5, newH));
-    const newY = Math.max(0, Math.min(100 - clampedH, y + (h - clampedH) / 2));
-    onChange({ unit: '%', x, y: newY, width: w, height: clampedH });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    const clampedW = Math.min(100, Math.max(5, newW));
+    const newY = Math.max(0, Math.min(100 - clampedH, current.y + (current.h - clampedH) / 2));
+    propsRef.current.onChange({ unit: '%', x: newX, y: newY, width: clampedW, height: clampedH });
   }, [aspect]);
 
   const startDrag = (handle: HandleType) => (e: React.PointerEvent) => {
@@ -48,91 +76,117 @@ export function CropOverlay({ crop, aspect, onChange, onComplete, isMobile = fal
     const target = e.currentTarget as HTMLElement;
     target.setPointerCapture(e.pointerId);
     const rect = overlayRef.current.getBoundingClientRect();
+    const lc = lastCropRef.current;
     dragStateRef.current = {
       handle,
       startX: e.clientX,
       startY: e.clientY,
-      startCrop: { x, y, w, h },
+      startCrop: { x: lc.x, y: lc.y, w: lc.w, h: lc.h },
       containerW: rect.width,
       containerH: rect.height,
     };
     setDragging(true);
   };
 
+  // Only bind window listeners while a drag is active — prevents 60fps listener churn
   useEffect(() => {
+    if (!dragging) return;
+
     const onMove = (e: PointerEvent) => {
-      const state = dragStateRef.current;
-      if (!state) return;
+      cancelAnimationFrame(rafRef.current);
+      rafRef.current = requestAnimationFrame(() => {
+        const state = dragStateRef.current;
+        if (!state) return;
 
-      const dx = ((e.clientX - state.startX) / state.containerW) * 100;
-      const dy = ((e.clientY - state.startY) / state.containerH) * 100;
+        const dx = ((e.clientX - state.startX) / state.containerW) * 100;
+        const dy = ((e.clientY - state.startY) / state.containerH) * 100;
 
-      let { x: nx, y: ny, w: nw, h: nh } = state.startCrop;
-      const minSize = isMobile ? 10 : 5;
+        let { x: nx, y: ny, w: nw, h: nh } = state.startCrop;
+        const minSize = propsRef.current.isMobile ? 10 : 5;
 
-      switch (state.handle) {
-        case 'move':
-          nx = Math.max(0, Math.min(100 - nw, state.startCrop.x + dx));
-          ny = Math.max(0, Math.min(100 - nh, state.startCrop.y + dy));
-          break;
-        case 'nw':
-          nx = Math.max(0, Math.min(state.startCrop.x + state.startCrop.w - minSize, state.startCrop.x + dx));
-          ny = Math.max(0, Math.min(state.startCrop.y + state.startCrop.h - minSize, state.startCrop.y + dy));
-          nw = state.startCrop.w - (nx - state.startCrop.x);
-          nh = state.startCrop.h - (ny - state.startCrop.y);
-          break;
-        case 'ne':
-          ny = Math.max(0, Math.min(state.startCrop.y + state.startCrop.h - minSize, state.startCrop.y + dy));
-          nw = Math.max(minSize, Math.min(100 - state.startCrop.x, state.startCrop.w + dx));
-          nh = state.startCrop.h - (ny - state.startCrop.y);
-          break;
-        case 'sw':
-          nx = Math.max(0, Math.min(state.startCrop.x + state.startCrop.w - minSize, state.startCrop.x + dx));
-          nw = state.startCrop.w - (nx - state.startCrop.x);
-          nh = Math.max(minSize, Math.min(100 - state.startCrop.y, state.startCrop.h + dy));
-          break;
-        case 'se':
-          nw = Math.max(minSize, Math.min(100 - state.startCrop.x, state.startCrop.w + dx));
-          nh = Math.max(minSize, Math.min(100 - state.startCrop.y, state.startCrop.h + dy));
-          break;
-        case 'n':
-          ny = Math.max(0, Math.min(state.startCrop.y + state.startCrop.h - minSize, state.startCrop.y + dy));
-          nh = state.startCrop.h - (ny - state.startCrop.y);
-          break;
-        case 's':
-          nh = Math.max(minSize, Math.min(100 - state.startCrop.y, state.startCrop.h + dy));
-          break;
-        case 'w':
-          nx = Math.max(0, Math.min(state.startCrop.x + state.startCrop.w - minSize, state.startCrop.x + dx));
-          nw = state.startCrop.w - (nx - state.startCrop.x);
-          break;
-        case 'e':
-          nw = Math.max(minSize, Math.min(100 - state.startCrop.x, state.startCrop.w + dx));
-          break;
-      }
+        switch (state.handle) {
+          case 'move':
+            nx = Math.max(0, Math.min(100 - nw, state.startCrop.x + dx));
+            ny = Math.max(0, Math.min(100 - nh, state.startCrop.y + dy));
+            break;
+          case 'nw':
+            nx = Math.max(0, Math.min(state.startCrop.x + state.startCrop.w - minSize, state.startCrop.x + dx));
+            ny = Math.max(0, Math.min(state.startCrop.y + state.startCrop.h - minSize, state.startCrop.y + dy));
+            nw = state.startCrop.w - (nx - state.startCrop.x);
+            nh = state.startCrop.h - (ny - state.startCrop.y);
+            break;
+          case 'ne':
+            ny = Math.max(0, Math.min(state.startCrop.y + state.startCrop.h - minSize, state.startCrop.y + dy));
+            nw = Math.max(minSize, Math.min(100 - state.startCrop.x, state.startCrop.w + dx));
+            nh = state.startCrop.h - (ny - state.startCrop.y);
+            break;
+          case 'sw':
+            nx = Math.max(0, Math.min(state.startCrop.x + state.startCrop.w - minSize, state.startCrop.x + dx));
+            nw = state.startCrop.w - (nx - state.startCrop.x);
+            nh = Math.max(minSize, Math.min(100 - state.startCrop.y, state.startCrop.h + dy));
+            break;
+          case 'se':
+            nw = Math.max(minSize, Math.min(100 - state.startCrop.x, state.startCrop.w + dx));
+            nh = Math.max(minSize, Math.min(100 - state.startCrop.y, state.startCrop.h + dy));
+            break;
+          case 'n':
+            ny = Math.max(0, Math.min(state.startCrop.y + state.startCrop.h - minSize, state.startCrop.y + dy));
+            nh = state.startCrop.h - (ny - state.startCrop.y);
+            break;
+          case 's':
+            nh = Math.max(minSize, Math.min(100 - state.startCrop.y, state.startCrop.h + dy));
+            break;
+          case 'w':
+            nx = Math.max(0, Math.min(state.startCrop.x + state.startCrop.w - minSize, state.startCrop.x + dx));
+            nw = state.startCrop.w - (nx - state.startCrop.x);
+            break;
+          case 'e':
+            nw = Math.max(minSize, Math.min(100 - state.startCrop.x, state.startCrop.w + dx));
+            break;
+        }
 
-      // Apply aspect ratio constraint
-      if (aspect && state.handle !== 'move') {
-        const pxW = (nw / 100) * state.containerW;
-        const pxH = (nh / 100) * state.containerH;
-        
-        if (state.handle === 'n' || state.handle === 's') {
-          const targetPxW = pxH * aspect;
-          nw = (targetPxW / state.containerW) * 100;
-          nx = Math.max(0, Math.min(100 - nw, nx + (state.startCrop.w - nw) / 2));
-        } else if (state.handle === 'e' || state.handle === 'w') {
-          const targetPxH = pxW / aspect;
-          nh = (targetPxH / state.containerH) * 100;
-          ny = Math.max(0, Math.min(100 - nh, ny + (state.startCrop.h - nh) / 2));
-        } else {
-          // Corner handles
-          const targetPxH = pxW / aspect;
-          nh = (targetPxH / state.containerH) * 100;
-          if (state.handle === 'nw' || state.handle === 'ne') {
-            ny = state.startCrop.y + state.startCrop.h - nh;
-          }
-          if (state.handle === 'nw' || state.handle === 'sw') {
-            nx = state.startCrop.x + state.startCrop.w - nw;
+        // Apply aspect ratio constraint while preserving correct bounds at edges
+        const asp = propsRef.current.aspect;
+        if (asp && state.handle !== 'move') {
+          let pxW = (nw / 100) * state.containerW;
+          let pxH = (nh / 100) * state.containerH;
+
+          if (state.handle === 'n' || state.handle === 's') {
+            let targetPxW = pxH * asp;
+            const maxPxW = state.containerW;
+            if (targetPxW > maxPxW) { targetPxW = maxPxW; pxH = targetPxW / asp; }
+            nw = (targetPxW / state.containerW) * 100;
+            nh = (pxH / state.containerH) * 100;
+            nx = Math.max(0, Math.min(100 - nw, nx + (state.startCrop.w - nw) / 2));
+          } else if (state.handle === 'e' || state.handle === 'w') {
+            let targetPxH = pxW / asp;
+            const maxPxH = state.containerH;
+            if (targetPxH > maxPxH) { targetPxH = maxPxH; pxW = targetPxH * asp; }
+            nh = (targetPxH / state.containerH) * 100;
+            nw = (pxW / state.containerW) * 100;
+            ny = Math.max(0, Math.min(100 - nh, ny + (state.startCrop.h - nh) / 2));
+          } else {
+            // Corner handles — clamp both dimensions proportionally to available space
+            const maxAvailW = state.handle.includes('w')
+              ? (state.startCrop.x + state.startCrop.w)
+              : (100 - state.startCrop.x);
+            const maxAvailH = state.handle.includes('n')
+              ? (state.startCrop.y + state.startCrop.h)
+              : (100 - state.startCrop.y);
+            const maxPxW = (maxAvailW / 100) * state.containerW;
+            const maxPxH = (maxAvailH / 100) * state.containerH;
+            let targetPxH = pxW / asp;
+            if (targetPxH > maxPxH) { targetPxH = maxPxH; pxW = targetPxH * asp; }
+            if (pxW > maxPxW) { pxW = maxPxW; targetPxH = pxW / asp; }
+            nw = (pxW / state.containerW) * 100;
+            nh = (targetPxH / state.containerH) * 100;
+            // Fix: was using startCrop.w instead of startCrop.h for ny (off-axis bug)
+            if (state.handle === 'nw' || state.handle === 'ne') {
+              ny = state.startCrop.y + state.startCrop.h - nh;
+            }
+            if (state.handle === 'nw' || state.handle === 'sw') {
+              nx = state.startCrop.x + state.startCrop.w - nw;
+            }
           }
         }
 
@@ -141,14 +195,17 @@ export function CropOverlay({ crop, aspect, onChange, onComplete, isMobile = fal
         ny = Math.max(0, Math.min(100 - nh, ny));
         nw = Math.max(minSize, Math.min(100 - nx, nw));
         nh = Math.max(minSize, Math.min(100 - ny, nh));
-      }
 
-      onChange({ unit: '%', x: nx, y: ny, width: nw, height: nh });
+        lastCropRef.current = { x: nx, y: ny, w: nw, h: nh };
+        propsRef.current.onChange({ unit: '%', x: nx, y: ny, width: nw, height: nh });
+      });
     };
 
     const onUp = () => {
+      cancelAnimationFrame(rafRef.current);
       if (!dragStateRef.current) return;
-      onComplete({ unit: '%', x, y, width: w, height: h });
+      const lc = lastCropRef.current;
+      propsRef.current.onComplete({ unit: '%', x: lc.x, y: lc.y, width: lc.w, height: lc.h });
       dragStateRef.current = null;
       setDragging(false);
     };
@@ -157,11 +214,12 @@ export function CropOverlay({ crop, aspect, onChange, onComplete, isMobile = fal
     window.addEventListener('pointerup', onUp);
     window.addEventListener('pointercancel', onUp);
     return () => {
+      cancelAnimationFrame(rafRef.current);
       window.removeEventListener('pointermove', onMove);
       window.removeEventListener('pointerup', onUp);
       window.removeEventListener('pointercancel', onUp);
     };
-  }, [x, y, w, h, aspect, onChange, onComplete, isMobile]);
+  }, [dragging]); // Only re-bind when dragging state toggles — not on every crop value change
 
   const handleSize = isMobile ? 18 : 16;
   const cornerSize = isMobile ? 22 : 20;
@@ -266,4 +324,4 @@ export function CropOverlay({ crop, aspect, onChange, onComplete, isMobile = fal
       </div>
     </div>
   );
-}
+});

@@ -300,6 +300,10 @@ input[type=range]::-moz-range-progress {
 }
 
 /* Utilities */
+@utility pb-safe {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
 .hide-scrollbar {
   -ms-overflow-style: none;
   scrollbar-width: none;

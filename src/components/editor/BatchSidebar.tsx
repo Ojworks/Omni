@@ -1,6 +1,6 @@
 import { WorkspaceFile, FileFormat } from '@/src/types';
 import { UploadDropzone } from './UploadDropzone';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, memo } from 'react';
 import { Reorder, AnimatePresence } from 'motion/react';
 import { Download, X, Copy, Trash2, GripVertical, ChevronDown } from 'lucide-react';
 import { useIsMobile } from '@/src/lib/hooks';
@@ -17,6 +17,8 @@ interface BatchSidebarProps {
   className?: string;
   onCloseMobile?: () => void;
   activeCategory?: string;
+  selectedFormat?: FileFormat;
+  onFormatChange?: (format: FileFormat) => void;
   onReorder?: (files: WorkspaceFile[]) => void;
   exportQuality?: number;
   setExportQuality?: (quality: number) => void;
@@ -24,7 +26,7 @@ interface BatchSidebarProps {
   onResetAll?: () => void;
 }
 
-export function BatchSidebar({ 
+export const BatchSidebar = memo(function BatchSidebar({ 
   files, 
   activeFileId, 
   setActiveFileId, 
@@ -41,28 +43,35 @@ export function BatchSidebar({
   setExportQuality,
   onApplyEditsToAll,
   onResetAll,
+  selectedFormat = 'image/jpeg',
+  onFormatChange,
 }: BatchSidebarProps) {
-  const [format, setFormat] = useState<FileFormat>('image/jpeg');
   const [estimatedSize, setEstimatedSize] = useState<number | null>(null);
   const [isEstimating, setIsEstimating] = useState(false);
   const isMobile = useIsMobile();
 
+  const estTimerRef = useRef<ReturnType<typeof setTimeout>>();
+
   useEffect(() => {
+    clearTimeout(estTimerRef.current);
+    setIsEstimating(false);
+    setEstimatedSize(null);
+
     if (files.length === 0) {
       setEstimatedSize(0);
       return;
     }
 
-    if (format === 'original' || format === 'image/png') {
+    if (selectedFormat === 'original' || selectedFormat === 'image/png') {
       const totalSize = files.reduce((acc, f) => acc + f.file.size, 0);
       setEstimatedSize(totalSize);
       return;
     }
 
     setIsEstimating(true);
-    const timer = setTimeout(() => {
+    estTimerRef.current = setTimeout(() => {
       const fileToTest = files[0];
-      const outFormat = format === 'application/pdf' ? 'image/jpeg' : format;
+      const outFormat = selectedFormat === 'application/pdf' ? 'image/jpeg' : selectedFormat;
       
       const img = new Image();
       img.onload = () => {
@@ -87,10 +96,10 @@ export function BatchSidebar({
       };
       img.onerror = () => setIsEstimating(false);
       img.src = fileToTest.originalUrl;
-    }, 50);
+    }, 200);
 
-    return () => clearTimeout(timer);
-  }, [files, format, exportQuality]);
+    return () => clearTimeout(estTimerRef.current);
+  }, [files, selectedFormat, exportQuality]);
 
   const showExport = activeCategory === 'export';
   const showFiles = activeCategory === 'batch';
@@ -116,8 +125,8 @@ export function BatchSidebar({
         <div className={`space-y-3 ${showExport ? 'block' : 'hidden lg:block'}`}>
           <label className="text-[10px] uppercase tracking-[0.15em] font-black text-muted block mb-2">Output Format</label>
           <select 
-             value={format} 
-             onChange={(e) => setFormat(e.target.value as FileFormat)}
+             value={selectedFormat} 
+             onChange={(e) => onFormatChange?.(e.target.value as FileFormat)}
              className="w-full rounded border border-border bg-surface px-3 py-2 text-xs font-bold uppercase tracking-wider text-fg outline-none focus:border-accent hover:border-fg cursor-pointer appearance-none"
           >
              <option value="original">Original Format</option>
@@ -126,12 +135,12 @@ export function BatchSidebar({
              <option value="image/webp">WEBP</option>
              <option value="application/pdf">{files.length > 1 ? 'PDF (Combined)' : 'PDF'}</option>
           </select>
-          {format === 'application/pdf' && files.length > 1 && (
+          {selectedFormat === 'application/pdf' && files.length > 1 && (
              <p className="text-xs text-muted leading-relaxed">All {files.length} images will be combined into a single PDF document in the order listed below.</p>
           )}
 
           {/* Quality Dropdown */}
-          {(format === 'image/jpeg' || format === 'image/webp' || format === 'application/pdf') && (
+          {(selectedFormat === 'image/jpeg' || selectedFormat === 'image/webp' || selectedFormat === 'application/pdf') && (
             <div className="pt-2">
               <div className="flex items-center justify-between mb-2">
                 <label className="text-[10px] uppercase tracking-[0.15em] font-black text-muted block">Quality</label>
@@ -256,7 +265,7 @@ export function BatchSidebar({
       <div className={`p-6 border-t border-border bg-surface/90 backdrop-blur shrink-0 z-10 flex flex-col items-center gap-3 ${showExport || !isMobile ? 'flex' : 'hidden'}`}>
          <button 
            disabled={isExporting}
-           onClick={() => onExport(format, false, exportQuality / 100)}
+           onClick={() => onExport(selectedFormat, false, exportQuality / 100)}
            className="flex w-full max-w-[240px] items-center justify-center gap-2 rounded-xl bg-accent px-4 py-3.5 text-[10px] font-black uppercase tracking-[0.2em] text-accent-fg transition-all hover:opacity-90 shadow-lg active:scale-95 disabled:opacity-50"
          >
            {isExporting ? (
@@ -269,7 +278,7 @@ export function BatchSidebar({
          {files.length > 1 && (
            <button 
              disabled={isExporting}
-             onClick={() => onExport(format, true, exportQuality / 100)}
+              onClick={() => onExport(selectedFormat, true, exportQuality / 100)}
              className="flex w-full max-w-[240px] items-center justify-center gap-2 rounded-xl border border-border bg-surface px-4 py-3 text-[10px] font-black uppercase tracking-[0.2em] text-fg transition-all hover:border-fg disabled:opacity-50"
            >
              <Copy className="h-4 w-4 text-muted" /> Export All ({files.length})
@@ -278,4 +287,4 @@ export function BatchSidebar({
       </div>
     </div>
   );
-}
+});

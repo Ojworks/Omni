@@ -42,13 +42,13 @@ interface EditorToolbarProps {
 type DesktopTab = 'filters' | 'transform' | 'resize' | 'magic';
 
 const TABS: { id: DesktopTab; icon: React.ReactNode; label: string }[] = [
-  { id: 'filters',   icon: <Sparkles className="h-4 w-4" />,          label: 'Filters'    },
   { id: 'transform', icon: <SlidersHorizontal className="h-4 w-4" />, label: 'Transform'  },
+  { id: 'filters',   icon: <Sparkles className="h-4 w-4" />,          label: 'Filters'    },
   { id: 'resize',    icon: <Maximize2 className="h-4 w-4" />,         label: 'Resize'     },
   { id: 'magic',     icon: <Wand2 className="h-4 w-4" />,             label: 'Magic'      },
 ];
 
-export function EditorToolbar({
+export const EditorToolbar = React.memo(function EditorToolbar({
   file,
   files = [],
   onEditChange,
@@ -144,7 +144,7 @@ export function EditorToolbar({
               </>
             ) : (
               <div className="grid grid-cols-3 gap-2">
-                {TRANSFORM_ACTIONS(edits, onEditChange, () => setIsCropActive(true)).map(a => (
+                {TRANSFORM_ACTIONS(edits, onEditChange, () => setIsCropActive(true), onCloseMobile).map(a => (
                   <button
                     key={a.label}
                     onClick={a.onClick}
@@ -247,7 +247,7 @@ export function EditorToolbar({
                 </button>
               ))}
             </div>
-            {selectedFormat !== 'application/pdf' && (
+            {(selectedFormat === 'image/jpeg' || selectedFormat === 'image/webp' || selectedFormat === 'application/pdf') && (
               <button
                 onClick={() => onQualityOpen?.()}
                 className="w-full flex items-center justify-between px-4 py-3 rounded-xl border border-border bg-surface active:bg-surface-hover transition-colors"
@@ -363,7 +363,7 @@ export function EditorToolbar({
               <>
                 <p className="text-[10px] uppercase tracking-widest font-bold text-muted">Rotate & Flip</p>
                 <div className="grid grid-cols-2 gap-2">
-                  {TRANSFORM_ACTIONS(edits, onEditChange, () => setIsCropActive(true)).map(a => (
+                  {TRANSFORM_ACTIONS(edits, onEditChange, () => setIsCropActive(true), undefined).map(a => (
                     <button
                       key={a.label}
                       onClick={a.onClick}
@@ -396,7 +396,7 @@ export function EditorToolbar({
       </div>
     </div>
   );
-}
+});
 
 // ─── Shared constants ──────────────────────────────────────────────────────
 
@@ -405,20 +405,21 @@ const CROP_RATIOS = [
   { label: '1:1',  val: 1 },
   { label: '4:3',  val: 4/3 },
   { label: '3:2',  val: 3/2 },
-  { label: '2:3',  val: 2/3 },
   { label: '16:9', val: 16/9 },
   { label: '21:9', val: 21/9 },
+  { label: '2:3',  val: 2/3 },
   { label: '9:16', val: 9/16 },
 ];
 
 const FORMAT_OPTIONS: { value: FileFormat; label: string }[] = [
-  { value: 'image/jpeg',    label: 'JPEG' },
-  { value: 'image/png',     label: 'PNG'  },
-  { value: 'image/webp',    label: 'WebP' },
+  { value: 'original',        label: 'Original' },
+  { value: 'image/jpeg',      label: 'JPEG' },
+  { value: 'image/png',       label: 'PNG'  },
+  { value: 'image/webp',      label: 'WebP' },
   { value: 'application/pdf', label: 'PDF' },
 ];
 
-const QUALITY_OPTIONS = [
+export const QUALITY_OPTIONS = [
   { value: 60,  label: 'Low (Web)'        },
   { value: 80,  label: 'Medium (Social)'  },
   { value: 90,  label: 'High (Print)'     },
@@ -428,14 +429,15 @@ const QUALITY_OPTIONS = [
 function TRANSFORM_ACTIONS(
   edits: ImageEdits,
   onEditChange: (e: Partial<ImageEdits>) => void,
-  onCrop: () => void
+  onCrop: () => void,
+  onCloseMobile?: () => void
 ) {
   return [
     { label: 'Crop',      icon: <Crop className="h-3.5 w-3.5" />,            onClick: onCrop },
-    { label: 'Rotate CW', icon: <RotateCw className="h-3.5 w-3.5" />,        onClick: () => onEditChange({ rotate: (edits.rotate + 90) % 360, crop: undefined }) },
-    { label: 'Rotate CCW',icon: <RotateCcw className="h-3.5 w-3.5" />,       onClick: () => onEditChange({ rotate: (edits.rotate - 90 + 360) % 360, crop: undefined }) },
-    { label: 'Flip H',    icon: <FlipHorizontal className="h-3.5 w-3.5" />,  onClick: () => onEditChange({ flipX: !edits.flipX, crop: undefined }) },
-    { label: 'Flip V',    icon: <FlipVertical className="h-3.5 w-3.5" />,    onClick: () => onEditChange({ flipY: !edits.flipY, crop: undefined }) },
+    { label: 'Rotate CW', icon: <RotateCw className="h-3.5 w-3.5" />,        onClick: () => onEditChange({ rotate: (edits.rotate + 90) % 360 }) },
+    { label: 'Rotate CCW',icon: <RotateCcw className="h-3.5 w-3.5" />,       onClick: () => onEditChange({ rotate: (edits.rotate - 90 + 360) % 360 }) },
+    { label: 'Flip H',    icon: <FlipHorizontal className="h-3.5 w-3.5" />,  onClick: () => onEditChange({ flipX: !edits.flipX }) },
+    { label: 'Flip V',    icon: <FlipVertical className="h-3.5 w-3.5" />,    onClick: () => onEditChange({ flipY: !edits.flipY }) },
   ];
 }
 
